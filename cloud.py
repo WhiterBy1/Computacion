@@ -82,7 +82,12 @@ class ContactManagerGUI:
     def setup_search(self):
         search_frame = ttk.Frame(self.left_frame, style='Bordered.TFrame')
         search_frame.pack(fill=tk.X, padx=5, pady=5)
+         # Añadir botón de nuevo contacto
+        add_button = ttk.Button(search_frame,
+                               text="+ Nuevo Contacto",
+                               command=self.add_contact)
         
+        add_button.pack(side=tk.RIGHT, padx=5, pady=5)
         self.search_var = tk.StringVar()
         self.search_var.trace_add('write', self.filter_contacts)
         
@@ -186,6 +191,68 @@ class ContactManagerGUI:
         self.detail_description_label = ttk.Label(info_frame, wraplength=300)
         self.detail_description_label.pack(anchor=tk.W, padx=20, pady=(0,10))
 
+    def add_contact(self):
+        add_window = tk.Toplevel(self.root)
+        add_window.title("Nuevo Contacto")
+        add_window.geometry("400x500")
+        
+        # Campos de entrada
+        ttk.Label(add_window, text="Nombre:").pack(padx=20, pady=(20,0))
+        first_name_entry = ttk.Entry(add_window)
+        first_name_entry.pack(padx=20)
+        
+        ttk.Label(add_window, text="Apellido:").pack(padx=20, pady=(10,0))
+        last_name_entry = ttk.Entry(add_window)
+        last_name_entry.pack(padx=20)
+        
+        ttk.Label(add_window, text="Teléfono:").pack(padx=20, pady=(10,0))
+        phone_entry = ttk.Entry(add_window)
+        phone_entry.pack(padx=20)
+        
+        ttk.Label(add_window, text="Emails (uno por línea):").pack(padx=20, pady=(10,0))
+        emails_text = tk.Text(add_window, height=4)
+        emails_text.pack(padx=20)
+        
+        ttk.Label(add_window, text="Descripción:").pack(padx=20, pady=(10,0))
+        description_text = tk.Text(add_window, height=4)
+        description_text.pack(padx=20)
+        
+        def save_contact():
+            # Validar campos requeridos
+            first_name = first_name_entry.get().strip()
+            last_name = last_name_entry.get().strip()
+            phone = phone_entry.get().strip()
+            
+            if not all([first_name, last_name, phone]):
+                messagebox.showerror("Error", "Nombre, apellido y teléfono son requeridos")
+                return
+            
+            # Crear nuevo contacto
+            emails = [e.strip() for e in emails_text.get('1.0', tk.END).split('\n') if e.strip()]
+            description = description_text.get('1.0', tk.END).strip()
+            
+            new_contact = Contact(
+                first_name=first_name,
+                last_name=last_name,
+                phone=phone,
+                emails=emails,
+                description=description
+            )
+            
+            # Añadir a la lista y actualizar
+            self.contacts.append(new_contact)
+            self.refresh_contacts_list()
+            self.select_contact(new_contact)
+            
+            # Cerrar ventana
+            add_window.destroy()
+            messagebox.showinfo("Éxito", "Contacto agregado correctamente")
+        
+        # Botón guardar
+        ttk.Button(add_window,
+                   text="Guardar",
+                   command=save_contact).pack(pady=20)
+        
     def create_contact_item(self, contact, parent):
         # Frame contenedor principal con clip
         frame = ttk.Frame(parent, style='Bordered.TFrame')
@@ -263,7 +330,7 @@ class ContactManagerGUI:
         search_text = self.search_var.get().lower()
         filtered_contacts = [
             c for c in self.contacts
-            if search_text in c.full_name.lower() or search_text in c.phone
+            if search_text in c.full_name.lower() or search_text in c.phone or search_text in c.description.lower()
         ]
         
         sorted_contacts = sorted(filtered_contacts, key=lambda x: x.full_name.lower())
