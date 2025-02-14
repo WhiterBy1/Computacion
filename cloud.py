@@ -1,9 +1,10 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-from typing import List, Optional
+from typing import Callable, List, Optional, Literal
 from datetime import datetime
 import re
 from contactos import contacts_data_prueba
+import unicodedata
 
 class Contact:
     def __init__(self, first_name: str, last_name: str, phone: str, emails: List[str], description: str = ""):
@@ -23,41 +24,234 @@ class Contact:
     def initial(self) -> str:
         return self.first_name[0].upper() if self.first_name else "?"
 
+class Validator:
+    """Clase para validar únicamente el formato de los datos de entrada"""
+    
+    @staticmethod
+    def validate_phone_format(phone: str, type: Literal['fijo', 'telefonico']) -> bool:
+        """Valida que el teléfono tenga 10 dígitos (eliminando caracteres no numéricos)"""
+        cleaned = re.sub(r'\D', '', phone)
+        return len(cleaned) == 10
+
+    @staticmethod
+    def validate_email_format(email: str) -> bool:
+        """Valida el formato básico de un email"""
+        pattern = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
+        return re.match(pattern, email) is not None
+
+    @staticmethod
+    def normalize_text(text: str) -> str:
+        """Normaliza texto: elimina acentos, convierte a minúsculas y remueve caracteres especiales"""
+        normalized = unicodedata.normalize('NFKD', text.lower()).encode('ascii', 'ignore').decode('ascii')
+        return re.sub(r'[^\w\s]', '', normalized).strip()
+
+class ContactManager:
+    """Clase para manejar las operaciones con contactos"""
+    
+    def __init__(self):
+        self.contacts: List[Contact] = []
+
+    def add_contact(self, contact_data: dict) -> tuple[bool, Optional[str], Optional[Contact]]:
+        """Añade un nuevo contacto verificando duplicados"""
+        # Verificar duplicados
+        if self._is_phone_duplicate(contact_data['phone']):
+            return False, "El teléfono ya existe en otro contacto", None
+            
+        if self._is_name_duplicate(contact_data['first_name'], contact_data['last_name']):
+            return False, "Ya existe un contacto con este nombre y apellido", None
+
+        # Crear y añadir el contacto
+        contact = Contact(**contact_data)
+        self.contacts.append(contact)
+        return True, None, contact
+
+    def update_contact(self, contact: Contact, new_data: dict) -> tuple[bool, Optional[str]]:
+        """Actualiza un contacto existente verificando duplicados"""
+        # Verificar duplicados excluyendo el contacto actual
+        if self._is_phone_duplicate(new_data['phone'], exclude=contact):
+            return False, "El teléfono ya existe en otro contacto"
+            
+        if self._is_name_duplicate(new_data['first_name'], new_data['last_name'], exclude=contact):
+            return False, "Ya existe un contacto con este nombre y apellido"
+
+        # Actualizar datos
+        for key, value in new_data.items():
+            setattr(contact, key, value)
+        contact.modified_at = datetime.now()
+        return True, None
+
+    def _is_phone_duplicate(self, phone: str, exclude: Optional[Contact] = None) -> bool:
+        """Verifica si el teléfono ya existe"""
+        cleaned_phone = re.sub(r'\D', '', phone)
+        return any(
+            contact != exclude and re.sub(r'\D', '', contact.phone) == cleaned_phone
+            for contact in self.contacts
+        )
+
+    def _is_name_duplicate(self, first_name: str, last_name: str, exclude: Optional[Contact] = None) -> bool:
+        """Verifica si el nombre completo ya existe"""
+        normalized_first = Validator.normalize_text(first_name)
+        normalized_last = Validator.normalize_text(last_name)
+        
+        return any(
+            contact != exclude and 
+            Validator.normalize_text(contact.first_name) == normalized_first and 
+            Validator.normalize_text(contact.last_name) == normalized_last
+            for contact in self.contacts
+        )
+
+    def search_contacts(self, query: str) -> List[Contact]:
+        """Busca contactos por nombre, teléfono o descripción"""
+        if not query.strip():
+            return sorted(self.contacts, key=lambda x: x.full_name.lower())
+            
+        normalized_query = Validator.normalize_text(query)
+        filtered_contacts = [
+            c for c in self.contacts
+            if any(
+                normalized_query in Validator.normalize_text(field)
+                for field in [c.full_name, c.phone, c.description]
+            )
+        ]
+        return sorted(filtered_contacts, key=lambda x: x.full_name.lower())
+
+class ContactForm(tk.Toplevel):
+    
+    def __init__(self, parent, contact_manager: ContactManager, on_save: Callable, 
+                 contact: Optional[Contact] = None):
+        super().__init__(parent)
+        self.title("Editar Contacto" if contact else "Nuevo Contacto")
+        self.geometry("400x500")
+        self.contact = contact
+        self.contact_manager = contact_manager
+        self.on_save = on_save
+        
+        self.setup_form()
+        if contact:
+            self.load_contact_data()
+
+    def setup_form(self):
+        # Campos de entrada
+        self.create_labeled_entry("Nombre:", "first_name", pady=(20,0))
+        self.create_labeled_entry("Apellido:", "last_name")
+        self.create_labeled_entry("Teléfono:", "phone")
+        
+        ttk.Label(self, text="Emails (uno por línea):").pack(padx=20, pady=(10,0))
+        self.emails_text = tk.Text(self, height=4)
+        self.emails_text.pack(padx=20)
+        
+        ttk.Label(self, text="Descripción:").pack(padx=20, pady=(10,0))
+        self.description_text = tk.Text(self, height=4)
+        self.description_text.pack(padx=20)
+        
+        ttk.Button(self, text="Guardar", command=self.save_contact).pack(pady=20)
+
+    def create_labeled_entry(self, label: str, attr_name: str, **kwargs):
+        ttk.Label(self, text=label).pack(padx=20, **kwargs)
+        entry = ttk.Entry(self)
+        entry.pack(padx=20)
+        setattr(self, f"{attr_name}_entry", entry)
+
+    def load_contact_data(self):
+        self.first_name_entry.insert(0, self.contact.first_name)
+        self.last_name_entry.insert(0, self.contact.last_name)
+        self.phone_entry.insert(0, self.contact.phone)
+        self.emails_text.insert('1.0', '\n'.join(self.contact.emails))
+        self.description_text.insert('1.0', self.contact.description)
+
+    def get_form_data(self):
+        return {
+            'first_name': self.first_name_entry.get().strip(),
+            'last_name': self.last_name_entry.get().strip(),
+            'phone': self.phone_entry.get().strip(),
+            'emails': [e.strip() for e in self.emails_text.get('1.0', tk.END).split('\n') if e.strip()],
+            'description': self.description_text.get('1.0', tk.END).strip()
+        }
+
+    def validate_form_data(self, data: dict) -> bool:
+        """Valida solo el formato de los datos del formulario"""
+        # Validar campos requeridos
+        if not all([data['first_name'], data['last_name'], data['phone']]):
+            messagebox.showerror("Error", "Todos los campos son requeridos")
+            return False
+
+        # Validar formato de teléfono
+        if not Validator.validate_phone_format(data['phone'], 'fijo'):
+            messagebox.showerror("Error", "El teléfono debe tener 10 dígitos")
+            return False
+
+        # Validar formato de emails
+        for email in data['emails']:
+            if not Validator.validate_email_format(email):
+                messagebox.showerror("Error", f"Email inválido: {email}")
+                return False
+
+        return True
+
+    def save_contact(self):
+        data = self.get_form_data()
+        if not self.validate_form_data(data):
+            return
+
+        if self.contact:
+            # Actualizar contacto existente
+            success, error_msg = self.contact_manager.update_contact(self.contact, data)
+        else:
+            # Crear nuevo contacto
+            success, error_msg, self.contact = self.contact_manager.add_contact(data)
+
+        if not success:
+            if "Ya existe" in error_msg:
+                if messagebox.askyesno("Advertencia", f"{error_msg}. ¿Desea continuar?"):
+                    # Forzar la actualización/creación
+                    if self.contact:
+                        for key, value in data.items():
+                            setattr(self.contact, key, value)
+                    else:
+                        self.contact = Contact(**data)
+                        self.contact_manager.contacts.append(self.contact)
+                    success = True
+                else:
+                    return
+            else:
+                messagebox.showerror("Error", error_msg)
+                return
+
+        if success:
+            self.on_save(self.contact)
+            self.destroy()
+            messagebox.showinfo(
+                "Éxito", 
+                "Contacto actualizado correctamente" if self.contact else "Contacto agregado correctamente"
+            )
+
 class ContactManagerGUI:
-    def __init__(self, root:tk.Tk):
+    def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("Agenda de Contactos")
+        self.contact_manager = ContactManager()
+        self.selected_contact = None
         
-        # Configurar el estilo
+        self.setup_gui()
+        self.load_sample_data()
+
+
+    def setup_gui(self):
         self.setup_styles()
-        
-        # Crear el frame principal
-        self.main_frame = ttk.Frame(root)
+        self.create_main_layout()
+        self.setup_search()
+        self.setup_contact_list()
+        self.setup_details_panel()
+
+    def create_main_layout(self):
+        self.main_frame = ttk.Frame(self.root)
         self.main_frame.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
         
-        # Frame izquierdo con borde
         self.left_frame = ttk.Frame(self.main_frame, style='Bordered.TFrame')
         self.left_frame.pack(side=tk.LEFT, fill=tk.BOTH, padx=2, pady=2)
         
-        # Frame derecho con borde
         self.right_frame = ttk.Frame(self.main_frame, style='Bordered.TFrame')
         self.right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2, pady=2)
-        
-        # Configurar la búsqueda
-        self.setup_search()
-        
-        # Configurar la lista de contactos
-        self.setup_contact_list()
-        
-        # Configurar el panel de detalles
-        self.setup_details_panel()
-        
-        # Variables de control
-        self.selected_contact = None
-        self.contacts = []
-        
-        # Cargar datos de ejemplo
-        self.load_sample_data()
 
     def setup_styles(self):
         style = ttk.Style()
@@ -191,68 +385,18 @@ class ContactManagerGUI:
         self.detail_description_label = ttk.Label(info_frame, wraplength=300)
         self.detail_description_label.pack(anchor=tk.W, padx=20, pady=(0,10))
 
+    def handle_contact_save(self, contact: Contact):
+        if contact not in self.contact_manager.contacts:
+            self.contact_manager.contacts.append(contact)
+        self.refresh_contacts_list()
+        self.select_contact(contact)
     def add_contact(self):
-        add_window = tk.Toplevel(self.root)
-        add_window.title("Nuevo Contacto")
-        add_window.geometry("400x500")
-        
-        # Campos de entrada
-        ttk.Label(add_window, text="Nombre:").pack(padx=20, pady=(20,0))
-        first_name_entry = ttk.Entry(add_window)
-        first_name_entry.pack(padx=20)
-        
-        ttk.Label(add_window, text="Apellido:").pack(padx=20, pady=(10,0))
-        last_name_entry = ttk.Entry(add_window)
-        last_name_entry.pack(padx=20)
-        
-        ttk.Label(add_window, text="Teléfono:").pack(padx=20, pady=(10,0))
-        phone_entry = ttk.Entry(add_window)
-        phone_entry.pack(padx=20)
-        
-        ttk.Label(add_window, text="Emails (uno por línea):").pack(padx=20, pady=(10,0))
-        emails_text = tk.Text(add_window, height=4)
-        emails_text.pack(padx=20)
-        
-        ttk.Label(add_window, text="Descripción:").pack(padx=20, pady=(10,0))
-        description_text = tk.Text(add_window, height=4)
-        description_text.pack(padx=20)
-        
-        def save_contact():
-            # Validar campos requeridos
-            first_name = first_name_entry.get().strip()
-            last_name = last_name_entry.get().strip()
-            phone = phone_entry.get().strip()
-            
-            if not all([first_name, last_name, phone]):
-                messagebox.showerror("Error", "Nombre, apellido y teléfono son requeridos")
-                return
-            
-            # Crear nuevo contacto
-            emails = [e.strip() for e in emails_text.get('1.0', tk.END).split('\n') if e.strip()]
-            description = description_text.get('1.0', tk.END).strip()
-            
-            new_contact = Contact(
-                first_name=first_name,
-                last_name=last_name,
-                phone=phone,
-                emails=emails,
-                description=description
-            )
-            
-            # Añadir a la lista y actualizar
-            self.contacts.append(new_contact)
-            self.refresh_contacts_list()
-            self.select_contact(new_contact)
-            
-            # Cerrar ventana
-            add_window.destroy()
-            messagebox.showinfo("Éxito", "Contacto agregado correctamente")
-        
-        # Botón guardar
-        ttk.Button(add_window,
-                   text="Guardar",
-                   command=save_contact).pack(pady=20)
-        
+        ContactForm(self.root, self.contact_manager, self.handle_contact_save)
+
+    def edit_contact(self):
+        if not self.selected_contact:
+            return
+        ContactForm(self.root, self.contact_manager, self.handle_contact_save, self.selected_contact)
     def create_contact_item(self, contact, parent):
         # Frame contenedor principal con clip
         frame = ttk.Frame(parent, style='Bordered.TFrame')
@@ -327,16 +471,11 @@ class ContactManagerGUI:
             widget.destroy()
         
         # Filtrar y ordenar contactos
-        search_text = self.search_var.get().lower()
-        filtered_contacts = [
-            c for c in self.contacts
-            if search_text in c.full_name.lower() or search_text in c.phone or search_text in c.description.lower()
-        ]
-        
-        sorted_contacts = sorted(filtered_contacts, key=lambda x: x.full_name.lower())
+        search_text = self.search_var.get().strip()
+        contacts = self.contact_manager.search_contacts(search_text)
         
         # Recrear lista
-        for contact in sorted_contacts:
+        for contact in contacts:
             item_frame = self.create_contact_item(contact, self.contacts_frame)
             if contact == self.selected_contact:
                 item_frame.configure(style='Selected.TFrame')
@@ -345,80 +484,28 @@ class ContactManagerGUI:
         self.refresh_contacts_list()
 
     def load_sample_data(self):
-        self.contacts = contacts_data_prueba
+        self.contact_manager.contacts = contacts_data_prueba
         self.refresh_contacts_list()
-
-    def edit_contact(self):
-        if not self.selected_contact:
-            return
+    def clear_details_panel(self):
         
-        edit_window = tk.Toplevel(self.root)
-        edit_window.title("Editar Contacto")
-        edit_window.geometry("400x500")
-        
-        # Campos de edición
-        ttk.Label(edit_window, text="Nombre:").pack(padx=20, pady=(20,0))
-        first_name_entry = ttk.Entry(edit_window)
-        first_name_entry.insert(0, self.selected_contact.first_name)
-        first_name_entry.pack(padx=20)
-        
-        ttk.Label(edit_window, text="Apellido:").pack(padx=20, pady=(10,0))
-        last_name_entry = ttk.Entry(edit_window)
-        last_name_entry.insert(0, self.selected_contact.last_name)
-        last_name_entry.pack(padx=20)
-        
-        ttk.Label(edit_window, text="Teléfono:").pack(padx=20, pady=(10,0))
-        phone_entry = ttk.Entry(edit_window)
-        phone_entry.insert(0, self.selected_contact.phone)
-        phone_entry.pack(padx=20)
-        
-        ttk.Label(edit_window, text="Emails (uno por línea):").pack(padx=20, pady=(10,0))
-        emails_text = tk.Text(edit_window, height=4)
-        emails_text.insert('1.0', '\n'.join(self.selected_contact.emails))
-        emails_text.pack(padx=20)
-        
-        ttk.Label(edit_window, text="Descripción:").pack(padx=20, pady=(10,0))
-        description_text = tk.Text(edit_window, height=4)
-        description_text.insert('1.0', self.selected_contact.description)
-        description_text.pack(padx=20)
-        
-        def save_changes():
-            self.selected_contact.first_name = first_name_entry.get()
-            self.selected_contact.last_name = last_name_entry.get()
-            self.selected_contact.phone = phone_entry.get()
-            self.selected_contact.emails = [
-                e.strip() for e in emails_text.get('1.0', tk.END).split('\n')
-                if e.strip()
-            ]
-            self.selected_contact.description = description_text.get('1.0', tk.END).strip()
-            self.selected_contact.modified_at = datetime.now()
-            
-            self.refresh_contacts_list()
-            self.update_details_panel(self.selected_contact)
-            edit_window.destroy()
-        
-        ttk.Button(edit_window,
-                  text="Guardar",
-                  command=save_changes).pack(pady=20)
-
+        self.detail_avatar_label.configure(text="")
+        self.detail_name_label.configure(text="")
+        self.detail_phone_label.configure(text="")
+        for widget in self.detail_emails_frame.winfo_children():
+            widget.destroy()
+        self.detail_description_label.configure(text="")
     def delete_contact(self):
         if not self.selected_contact:
             return
         
         if messagebox.askyesno("Confirmar eliminación",
                               f"¿Está seguro de eliminar a {self.selected_contact.full_name}?"):
-            self.contacts.remove(self.selected_contact)
+            self.contact_manager.contacts.remove(self.selected_contact)
             self.selected_contact = None
             self.refresh_contacts_list()
             
             # Limpiar panel de detalles
-            self.detail_avatar_label.configure(text="")
-            self.detail_name_label.configure(text="")
-            self.detail_phone_label.configure(text="")
-            for widget in self.detail_emails_frame.winfo_children():
-                widget.destroy()
-            self.detail_description_label.configure(text="")
-            
+            self.clear_details_panel()
             messagebox.showinfo("Éxito", "Contacto eliminado correctamente")
 
 def main():
