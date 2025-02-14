@@ -61,7 +61,7 @@ class ContactManagerGUI:
 
     def setup_styles(self):
         style = ttk.Style()
-        
+        style.theme_use('default')
         # Estilo para frames con borde
         style.configure('Bordered.TFrame', 
                        borderwidth=1, 
@@ -94,23 +94,37 @@ class ContactManagerGUI:
     def setup_contact_list(self):
         self.contacts_canvas = tk.Canvas(self.left_frame)
         scrollbar = ttk.Scrollbar(self.left_frame, 
-                                orient="vertical", 
-                                command=self.contacts_canvas.yview)
+                                  orient="vertical", 
+                                  command=self.contacts_canvas.yview)
+
         self.contacts_frame = ttk.Frame(self.contacts_canvas)
-        
+
+        # Ajustar el área de desplazamiento dinámicamente
         self.contacts_frame.bind(
             "<Configure>",
             lambda e: self.contacts_canvas.configure(
                 scrollregion=self.contacts_canvas.bbox("all")
             )
         )
-        
-        self.contacts_canvas.create_window((0, 0), 
-                                         window=self.contacts_frame, 
-                                         anchor="nw", 
-                                         width=280)
+
+        # Crear el frame dentro del canvas
+        window_id = self.contacts_canvas.create_window(
+            (0, 0), 
+            window=self.contacts_frame, 
+            anchor="nw"
+        )
+
+        # Ajustar el ancho del frame cuando el canvas cambia de tamaño
+        def update_frame_width(event):
+            canvas_width = event.width  # Obtener el ancho del canvas
+            self.contacts_canvas.itemconfig(window_id, width=canvas_width)
+
+        self.contacts_canvas.bind("<Configure>", update_frame_width)
+
+        # Configurar la barra de desplazamiento
         self.contacts_canvas.configure(yscrollcommand=scrollbar.set)
-        
+
+        # Empaquetar widgets
         self.contacts_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
@@ -173,37 +187,44 @@ class ContactManagerGUI:
         self.detail_description_label.pack(anchor=tk.W, padx=20, pady=(0,10))
 
     def create_contact_item(self, contact, parent):
+        # Frame contenedor principal con clip
         frame = ttk.Frame(parent, style='Bordered.TFrame')
         frame.pack(fill=tk.X, padx=5, pady=2)
-        
+        frame.pack_propagate(False)  # Evita que el frame se ajuste al contenido
+        frame.configure(height=50)  # Altura fija para el frame
+
+        # Frame interno para el contenido
+        content_frame = ttk.Frame(frame)
+        content_frame.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+
         # Avatar
-        avatar_label = tk.Label(frame,
+        avatar_label = tk.Label(content_frame,
                               text=contact.initial,
                               width=2,
                               font=('Arial', 12, 'bold'),
                               bg='#2ECC71',
                               fg='white')
         avatar_label.pack(side=tk.LEFT, padx=5, pady=5)
-        
+
         # Información
-        info_frame = ttk.Frame(frame)
+        info_frame = ttk.Frame(content_frame)
         info_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
-        
+
         name_label = ttk.Label(info_frame,
                              text=contact.full_name,
                              font=('Arial', 10))
         name_label.pack(anchor=tk.W)
-        
+
         phone_label = ttk.Label(info_frame,
                               text=contact.phone,
                               font=('Arial', 9),
                               foreground='gray')
         phone_label.pack(anchor=tk.W)
-        
+
         # Vincular eventos de clic
-        for widget in [frame, avatar_label, info_frame, name_label, phone_label]:
+        for widget in [frame, content_frame, avatar_label, info_frame, name_label, phone_label]:
             widget.bind('<Button-1>', lambda e, c=contact: self.select_contact(c))
-            
+
         return frame
 
     def select_contact(self, contact:Contact):
