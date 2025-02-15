@@ -6,11 +6,6 @@ import re
 from contactos import contacts_data_prueba
 import unicodedata
 
-cosas_añadir = [
-                "Intuitivo caundo aun no he seleccionado ningun contacto",
-                "Que el usuario pueda elejir el tema de la aplicacion",
-                "Limite de contactos",
-                ]
 class Contact:
     def __init__(self, first_name: str, last_name: str, phones: List[str], emails: List[str], description: str = ""):
         self.first_name = first_name
@@ -114,6 +109,7 @@ class ContactManager:
     
     def __init__(self):
         self.contacts: List[Contact] = []
+        self.MAX_CONTACTS_FREE_VERSION = 33
 
     def add_contact(self, contact_data: dict) -> tuple[bool, Optional[str], Optional[Contact]]:
         """Añade un nuevo contacto verificando duplicados"""
@@ -222,6 +218,7 @@ class ContactForm(tk.Toplevel):
         self.description_text.pack(padx=20)
         
         ttk.Button(self, text="Guardar", command=self.save_contact).pack(pady=20)
+
     def create_labeled_entry(self, label: str, attr_name: str, **kwargs):
         ttk.Label(self, text=label).pack(padx=20, **kwargs)
         entry = ttk.Entry(self)
@@ -243,78 +240,69 @@ class ContactForm(tk.Toplevel):
             'emails': [e.strip() for e in self.emails_text.get('1.0', tk.END).split('\n') if e.strip()],
             'description': self.description_text.get('1.0', tk.END).strip()
         }
-    def validate_form_data(self, data: dict) -> tuple[bool, List[str]]:
-        """Valida los datos del formulario y retorna una lista de advertencias"""
+    def validate_and_process_data(self, data: dict) -> tuple[bool, Optional[str], List[str]]:
+        """
+        Valida y procesa los datos del formulario.
+        Retorna: (es_válido, mensaje_error, advertencias)
+        """
         warnings = []
 
-        # Validar que al menos uno de los dos (nombre o apellido) esté presente
+        # Validaciones críticas que impiden guardar
         if not data['first_name'] and not data['last_name']:
-            messagebox.showerror("Error", "Debe ingresar al menos un nombre o un apellido")
-            return False, []
-        # Validar que al menos un teléfono o un correo esté presente
-        if not data['phones'] and not data['emails']:
-            messagebox.showerror("Error", "Debe ingresar al menos un teléfono o un correo electrónico")
-        # Validar formato de teléfonos
-        for phone in data['phones']:        
-            is_valid, error_msg, phone_type = Validator.validate_phone_format(phone)
-            if not is_valid:
-                warnings.append(f"{error_msg}")
+            return False, "Debe ingresar al menos un nombre o un apellido", []
 
-        # Validar formato de emails
+        if not data['phones'] and not data['emails']:
+            return False, "Debe ingresar al menos un teléfono o un correo electrónico", []
+
+        # Validar formato de emails (crítico)
         for email in data['emails']:
             if not Validator.validate_email_format(email):
-                messagebox.showerror("Error", f"Email inválido: {email}")
-                return False, []
-        # Verificar duplicados de nombre y apellido (conjunto completo)
+                return False, f"Email inválido: {email}", []
+
+        # Validar formato de teléfonos (advertencia)
+        for phone in data['phones']:
+            is_valid, error_msg, phone_type = Validator.validate_phone_format(phone)
+            if not is_valid:
+                warnings.append(error_msg)
+
+        # Verificar duplicados (advertencia)
         if self.contact_manager._is_name_duplicate(data['first_name'], data['last_name'], exclude=self.contact):
             warnings.append("Ya existe un contacto con este nombre y apellido")
 
-        return True, warnings
+        for phone in data['phones']:
+            if self.contact_manager._is_phone_duplicate(phone, exclude=self.contact):
+                warnings.append(f"El teléfono {phone} ya existe en otro contacto")
 
+        return True, None, warnings
     def save_contact(self):
         data = self.get_form_data()
-        is_valid, warnings = self.validate_form_data(data)
-        
+        is_valid, error_msg, warnings = self.validate_and_process_data(data)
+
         if not is_valid:
+            messagebox.showerror("Error", error_msg)
             return
 
-        # Mostrar advertencias y preguntar si desea continuar
         if warnings:
-            warning_message = "\n".join(warnings) + "\n\n¿Desea continuar de todos modos?"
+            warning_message = "\n".join(warnings) + "\n\n¿Continuar?"
             if not messagebox.askyesno("Advertencias", warning_message):
                 return
 
+        # Usar métodos del ContactManager correctamente
         if self.contact:
-            # Actualizar contacto existente
-            success, error_msg = self.contact_manager.update_contact(self.contact, data)
-        else:
-            # Crear nuevo contacto
-            success, error_msg, self.contact = self.contact_manager.add_contact(data)
-
-        if not success:
-            if "Ya existe" in error_msg:
-                if messagebox.askyesno("Advertencia", f"{error_msg}. ¿Desea continuar?"):
-                    if self.contact:
-                        for key, value in data.items():
-                            setattr(self.contact, key, value)
-                    else:
-                        self.contact = Contact(**data)
-                        self.contact_manager.contacts.append(self.contact)
-                    success = True
-                else:
-                    return
-            else:
-                messagebox.showerror("Error", error_msg)
+            success, error = self.contact_manager.update_contact(self.contact, data)
+            if not success:
+                messagebox.showerror("Error", error)
                 return
+        else:
+            success, error, new_contact = self.contact_manager.add_contact(data)
+            if not success:
+                messagebox.showerror("Error", error)
+                return
+            self.contact = new_contact
 
-        if success:
-            self.on_save(self.contact)
-            self.destroy()
-            messagebox.showinfo(
-                "Éxito", 
-                "Contacto actualizado correctamente" if self.contact else "Contacto agregado correctamente"
-            )
-
+        self.on_save(self.contact)
+        self.destroy()
+        messagebox.showinfo("Éxito", "Contacto guardado correctamente")
 class ContactManagerGUI:
     def __init__(self, root: tk.Tk):
         self.root = root
@@ -481,6 +469,10 @@ class ContactManagerGUI:
         self.refresh_contacts_list()
         self.select_contact(contact)
     def add_contact(self):
+        # Verificar el límite de contactos antes de abrir el formulario
+        if len(self.contact_manager.contacts) >= self.contact_manager.MAX_CONTACTS_FREE_VERSION:
+            messagebox.showerror("Versión gratuita de prueba", "Ha alcanzado el límite de contactos de la versión gratuita de prueba.")
+            return
         ContactForm(self.root, self.contact_manager, self.handle_contact_save)
 
     def edit_contact(self):
