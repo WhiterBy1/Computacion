@@ -6,15 +6,18 @@ import re
 from contactos import contacts_data_prueba
 import unicodedata
 
+cosas_añadir = [
+                "Intuitivo caundo aun no he seleccionado ningun contacto",
+                "Que el usuario pueda elejir el tema de la aplicacion",
+                "Limite de contactos",
+                ]
 class Contact:
-    def __init__(self, first_name: str, last_name: str, phone: str, emails: List[str], description: str = ""):
+    def __init__(self, first_name: str, last_name: str, phones: List[str], emails: List[str], description: str = ""):
         self.first_name = first_name
         self.last_name = last_name
-        self.phone = phone
+        self.phones = phones
         self.emails = emails
         self.description = description
-        self.created_at = datetime.now()
-        self.modified_at = datetime.now()
 
     @property
     def full_name(self) -> str:
@@ -22,16 +25,77 @@ class Contact:
 
     @property
     def initial(self) -> str:
-        return self.first_name[0].upper() if self.first_name else "?"
+        return self.first_name[0].upper() if self.first_name else self.last_name[0].upper()
 
+    @property
+    def primary_phone(self) -> str:
+        return self.phones[0] if self.phones else self.emails[0] if self.emails else "Sin información"
 class Validator:
     """Clase para validar únicamente el formato de los datos de entrada"""
     
+    # Prefijos para números de telefonía móvil en Colombia
+    MOBILE_PREFIXES = [
+        '300', '301', '302', '303', '304', '305',  # Claro
+        '310', '311', '312', '313', '314', '315', '316', '317', '318', '319',  # Claro
+        '320', '321', '322', '323',  # Movistar
+        '324', '325', '326',  # Movistar (nuevos)
+        '330', '331', '332', '333', '334',  # Movistar (expandido)
+        '350', '351', '352',  # Wom
+        '360', '361', '362', '363', '364',  # Avantel/Wom
+        '370', '371', '372', '373',  # Virgin Mobile
+    ]
+
+    # Prefijos de líneas fijas válidos en Colombia
+    LANDLINE_PREFIXES = ['601', '602', '604', '605', '606', '607', '608']
+    
     @staticmethod
-    def validate_phone_format(phone: str, type: Literal['fijo', 'telefonico']) -> bool:
-        """Valida que el teléfono tenga 10 dígitos (eliminando caracteres no numéricos)"""
+    def validate_phone_format(phone: str) -> tuple[bool, str, str]:
+        """
+        Valida que el teléfono tenga el formato correcto, detectando automáticamente
+        si es móvil o fijo.
+        \nretornando:
+            tuple: (es_válido, mensaje_error, tipo_numero)
+        """
+        # Limpiar el número de espacios y caracteres especiales
         cleaned = re.sub(r'\D', '', phone)
-        return len(cleaned) == 10
+        
+        # Verificar longitud
+        if len(cleaned) != 10:
+            return False, "El número debe tener 10 dígitos", 'desconocido'
+            
+        # Obtener prefijo
+        prefix = cleaned[:3]
+        
+        # Verificar si es móvil
+        if prefix in Validator.MOBILE_PREFIXES:
+            return True, "", 'movil'
+            
+        # Verificar si es fijo
+        if prefix in Validator.LANDLINE_PREFIXES:
+            return True, "", 'fijo'
+                
+        # Si llegamos aquí, el prefijo no es válido
+        return False, f"El número {phone} no es válido en Colombia (prefijo {prefix} desconocido)", 'desconocido'
+
+    @staticmethod
+    def format_phone_number(phone: str) -> str:
+        """
+        Da formato al número telefónico para mejor visualización, 
+        detectando automáticamente el tipo
+        """
+        cleaned = re.sub(r'\D', '', phone)
+        if len(cleaned) != 10:
+            return cleaned
+            
+        prefix = cleaned[:3]
+        # Formato para móviles: XXX XXX XXXX
+        if prefix in Validator.MOBILE_PREFIXES:
+            return f"{cleaned[:3]} {cleaned[3:6]} {cleaned[6:]}"
+        # Formato para fijos: (XXX) XXX XXXX
+        elif prefix in Validator.LANDLINE_PREFIXES:
+            return f"({cleaned[:3]}) {cleaned[3:6]} {cleaned[6:]}"
+        # Si no se reconoce el tipo, retornar sin formato especial
+        return cleaned
 
     @staticmethod
     def validate_email_format(email: str) -> bool:
@@ -53,50 +117,48 @@ class ContactManager:
 
     def add_contact(self, contact_data: dict) -> tuple[bool, Optional[str], Optional[Contact]]:
         """Añade un nuevo contacto verificando duplicados"""
-        # Verificar duplicados
-        if self._is_phone_duplicate(contact_data['phone']):
-            return False, "El teléfono ya existe en otro contacto", None
+        # Verificar duplicados de teléfono
+        for phone in contact_data['phones']:
+            if self._is_phone_duplicate(phone):
+                return False, f"El teléfono {phone} ya existe en otro contacto", None
             
         if self._is_name_duplicate(contact_data['first_name'], contact_data['last_name']):
             return False, "Ya existe un contacto con este nombre y apellido", None
 
-        # Crear y añadir el contacto
         contact = Contact(**contact_data)
         self.contacts.append(contact)
         return True, None, contact
 
     def update_contact(self, contact: Contact, new_data: dict) -> tuple[bool, Optional[str]]:
         """Actualiza un contacto existente verificando duplicados"""
-        # Verificar duplicados excluyendo el contacto actual
-        if self._is_phone_duplicate(new_data['phone'], exclude=contact):
-            return False, "El teléfono ya existe en otro contacto"
+        for phone in new_data['phones']:
+            if self._is_phone_duplicate(phone, exclude=contact):
+                return False, f"El teléfono {phone} ya existe en otro contacto"
             
         if self._is_name_duplicate(new_data['first_name'], new_data['last_name'], exclude=contact):
             return False, "Ya existe un contacto con este nombre y apellido"
 
-        # Actualizar datos
         for key, value in new_data.items():
             setattr(contact, key, value)
-        contact.modified_at = datetime.now()
         return True, None
 
     def _is_phone_duplicate(self, phone: str, exclude: Optional[Contact] = None) -> bool:
         """Verifica si el teléfono ya existe"""
         cleaned_phone = re.sub(r'\D', '', phone)
         return any(
-            contact != exclude and re.sub(r'\D', '', contact.phone) == cleaned_phone
+            contact != exclude and any(re.sub(r'\D', '', p) == cleaned_phone for p in contact.phones)
             for contact in self.contacts
         )
 
     def _is_name_duplicate(self, first_name: str, last_name: str, exclude: Optional[Contact] = None) -> bool:
         """Verifica si el nombre completo ya existe"""
-        normalized_first = Validator.normalize_text(first_name)
-        normalized_last = Validator.normalize_text(last_name)
-        
+        full_name = f"{first_name} {last_name}".strip() 
+        normalized_full_name = Validator.normalize_text(full_name) 
+
+        # Verificar si el conjunto de nombre y apellido está duplicado
         return any(
             contact != exclude and 
-            Validator.normalize_text(contact.first_name) == normalized_first and 
-            Validator.normalize_text(contact.last_name) == normalized_last
+            Validator.normalize_text(f"{contact.first_name} {contact.last_name}") == normalized_full_name
             for contact in self.contacts
         )
 
@@ -110,18 +172,17 @@ class ContactManager:
             c for c in self.contacts
             if any(
                 normalized_query in Validator.normalize_text(field)
-                for field in [c.full_name, c.phone, c.description]
+                for field in [c.full_name, *c.phones, c.description]
             )
         ]
         return sorted(filtered_contacts, key=lambda x: x.full_name.lower())
-
 class ContactForm(tk.Toplevel):
     
     def __init__(self, parent, contact_manager: ContactManager, on_save: Callable, 
                  contact: Optional[Contact] = None):
         super().__init__(parent)
         self.title("Editar Contacto" if contact else "Nuevo Contacto")
-        self.geometry("400x500")
+        self.geometry("400x600")
         self.contact = contact
         self.contact_manager = contact_manager
         self.on_save = on_save
@@ -131,21 +192,36 @@ class ContactForm(tk.Toplevel):
             self.load_contact_data()
 
     def setup_form(self):
-        # Campos de entrada
+        # Campos de entrada básicos
         self.create_labeled_entry("Nombre:", "first_name", pady=(20,0))
         self.create_labeled_entry("Apellido:", "last_name")
-        self.create_labeled_entry("Teléfono:", "phone")
-        
-        ttk.Label(self, text="Emails (uno por línea):").pack(padx=20, pady=(10,0))
-        self.emails_text = tk.Text(self, height=4)
+        # Campo de teléfonos
+        ttk.Label(self, text="Telefonos (uno por línea):", font=('Arial', 10)).pack(padx=20, pady=(10,0))
+        # Validación en tiempo real para el campo de teléfonos
+        def validate_phone_input(event):
+            # Permitir teclas especiales (Backspace, Delete, etc.)
+            if event.keysym in {'BackSpace', 'Delete', 'Left', 'Right'}:
+                return True
+
+            # Validar el carácter ingresado
+            char = event.char
+            if re.match(r'^[\d\s\+\-\(\)]$', char):
+                return True
+            else:
+                return False
+
+        self.phones_text = tk.Text(self, height=4, font=('Arial', 10))
+        self.phones_text.pack(padx=20)
+        self.phones_text.bind('<Key>', lambda e: validate_phone_input(e) or "break")
+        ttk.Label(self, text="Emails (uno por línea):", font=('Arial', 10)).pack(padx=20, pady=(10,0))
+        self.emails_text = tk.Text(self, height=4, font=('Arial', 10))
         self.emails_text.pack(padx=20)
         
-        ttk.Label(self, text="Descripción:").pack(padx=20, pady=(10,0))
-        self.description_text = tk.Text(self, height=4)
+        ttk.Label(self, text="Descripción:", font=('Arial', 10)).pack(padx=20, pady=(10,0))
+        self.description_text = tk.Text(self, height=4, font=('Arial', 10))
         self.description_text.pack(padx=20)
         
         ttk.Button(self, text="Guardar", command=self.save_contact).pack(pady=20)
-
     def create_labeled_entry(self, label: str, attr_name: str, **kwargs):
         ttk.Label(self, text=label).pack(padx=20, **kwargs)
         entry = ttk.Entry(self)
@@ -155,7 +231,7 @@ class ContactForm(tk.Toplevel):
     def load_contact_data(self):
         self.first_name_entry.insert(0, self.contact.first_name)
         self.last_name_entry.insert(0, self.contact.last_name)
-        self.phone_entry.insert(0, self.contact.phone)
+        self.phones_text.insert('1.0', '\n'.join(self.contact.phones))
         self.emails_text.insert('1.0', '\n'.join(self.contact.emails))
         self.description_text.insert('1.0', self.contact.description)
 
@@ -163,35 +239,50 @@ class ContactForm(tk.Toplevel):
         return {
             'first_name': self.first_name_entry.get().strip(),
             'last_name': self.last_name_entry.get().strip(),
-            'phone': self.phone_entry.get().strip(),
+            'phones': [p.strip() for p in self.phones_text.get('1.0', tk.END).split('\n') if p.strip()],
             'emails': [e.strip() for e in self.emails_text.get('1.0', tk.END).split('\n') if e.strip()],
             'description': self.description_text.get('1.0', tk.END).strip()
         }
+    def validate_form_data(self, data: dict) -> tuple[bool, List[str]]:
+        """Valida los datos del formulario y retorna una lista de advertencias"""
+        warnings = []
 
-    def validate_form_data(self, data: dict) -> bool:
-        """Valida solo el formato de los datos del formulario"""
-        # Validar campos requeridos
-        if not all([data['first_name'], data['last_name'], data['phone']]):
-            messagebox.showerror("Error", "Todos los campos son requeridos")
-            return False
-
-        # Validar formato de teléfono
-        if not Validator.validate_phone_format(data['phone'], 'fijo'):
-            messagebox.showerror("Error", "El teléfono debe tener 10 dígitos")
-            return False
+        # Validar que al menos uno de los dos (nombre o apellido) esté presente
+        if not data['first_name'] and not data['last_name']:
+            messagebox.showerror("Error", "Debe ingresar al menos un nombre o un apellido")
+            return False, []
+        # Validar que al menos un teléfono o un correo esté presente
+        if not data['phones'] and not data['emails']:
+            messagebox.showerror("Error", "Debe ingresar al menos un teléfono o un correo electrónico")
+        # Validar formato de teléfonos
+        for phone in data['phones']:        
+            is_valid, error_msg, phone_type = Validator.validate_phone_format(phone)
+            if not is_valid:
+                warnings.append(f"{error_msg}")
 
         # Validar formato de emails
         for email in data['emails']:
             if not Validator.validate_email_format(email):
                 messagebox.showerror("Error", f"Email inválido: {email}")
-                return False
+                return False, []
+        # Verificar duplicados de nombre y apellido (conjunto completo)
+        if self.contact_manager._is_name_duplicate(data['first_name'], data['last_name'], exclude=self.contact):
+            warnings.append("Ya existe un contacto con este nombre y apellido")
 
-        return True
+        return True, warnings
 
     def save_contact(self):
         data = self.get_form_data()
-        if not self.validate_form_data(data):
+        is_valid, warnings = self.validate_form_data(data)
+        
+        if not is_valid:
             return
+
+        # Mostrar advertencias y preguntar si desea continuar
+        if warnings:
+            warning_message = "\n".join(warnings) + "\n\n¿Desea continuar de todos modos?"
+            if not messagebox.askyesno("Advertencias", warning_message):
+                return
 
         if self.contact:
             # Actualizar contacto existente
@@ -203,7 +294,6 @@ class ContactForm(tk.Toplevel):
         if not success:
             if "Ya existe" in error_msg:
                 if messagebox.askyesno("Advertencia", f"{error_msg}. ¿Desea continuar?"):
-                    # Forzar la actualización/creación
                     if self.contact:
                         for key, value in data.items():
                             setattr(self.contact, key, value)
@@ -368,8 +458,8 @@ class ContactManagerGUI:
         ttk.Label(info_frame,
                  text="Teléfono:",
                  font=('Arial', 11, 'bold')).pack(anchor=tk.W, padx=10, pady=(10,0))
-        self.detail_phone_label = ttk.Label(info_frame)
-        self.detail_phone_label.pack(anchor=tk.W, padx=20)
+        self.detail_phones_label = ttk.Label(info_frame)
+        self.detail_phones_label.pack(anchor=tk.W, padx=20)
         
         # Emails
         ttk.Label(info_frame,
@@ -397,7 +487,7 @@ class ContactManagerGUI:
         if not self.selected_contact:
             return
         ContactForm(self.root, self.contact_manager, self.handle_contact_save, self.selected_contact)
-    def create_contact_item(self, contact, parent):
+    def create_contact_item(self, contact: Contact, parent):
         # Frame contenedor principal con clip
         frame = ttk.Frame(parent, style='Bordered.TFrame')
         frame.pack(fill=tk.X, padx=5, pady=2)
@@ -426,8 +516,9 @@ class ContactManagerGUI:
                              font=('Arial', 10))
         name_label.pack(anchor=tk.W)
 
+        primary_info = Validator.format_phone_number(contact.primary_phone) if contact.phones else contact.emails[0] if contact.emails else "Sin información"
         phone_label = ttk.Label(info_frame,
-                              text=contact.phone,
+                              text=primary_info,
                               font=('Arial', 9),
                               foreground='gray')
         phone_label.pack(anchor=tk.W)
@@ -452,8 +543,11 @@ class ContactManagerGUI:
         self.detail_avatar_label.configure(text=contact.initial)
         self.detail_name_label.configure(text=contact.full_name)
         
-        # Teléfono
-        self.detail_phone_label.configure(text=contact.phone)
+        # Limpiar y actualizar teléfonos
+        for widget in self.detail_phones_label.winfo_children():
+            widget.destroy()
+        for phone in contact.phones:
+            ttk.Label(self.detail_phones_label, text=phone).pack(anchor=tk.W)
         
         # Limpiar y actualizar emails
         for widget in self.detail_emails_frame.winfo_children():
@@ -490,7 +584,8 @@ class ContactManagerGUI:
         
         self.detail_avatar_label.configure(text="")
         self.detail_name_label.configure(text="")
-        self.detail_phone_label.configure(text="")
+        for widget in self.detail_phones_label.winfo_children():
+            widget.destroy()
         for widget in self.detail_emails_frame.winfo_children():
             widget.destroy()
         self.detail_description_label.configure(text="")
