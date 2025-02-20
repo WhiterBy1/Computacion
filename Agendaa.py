@@ -1,9 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-from typing import Callable, List, Optional, Literal
-from datetime import datetime
+from typing import Callable, List, Optional
 import re
-from contactos import contacts_data_prueba
 import unicodedata
 
 class Contact:
@@ -25,6 +23,75 @@ class Contact:
     @property
     def primary_phone(self) -> str:
         return self.phones[0] if self.phones else self.emails[0] if self.emails else "Sin información"
+
+contacts_data_prueba = [
+    Contact("Jose David", "Quiñonez Rehenals", ["3127368737", "6051234567"],
+            ["Example1@gmail.com", "Example1@utb.edu.co"],
+            "Compañero de clases de Computación e interfaces"),
+    Contact("Danna Valentina", "Zualaga", ["3256859895", "6057654321"],
+            ["danna@email.com"]),
+    Contact("Daniel Eduardo", "Rengifo", [],
+            ["daniel@email.com"]),
+    Contact("David", "Gonzalez", ["3118734541", "6052345678"],
+            ["david@email.com"]),
+    Contact("Laura Sofia", "Madrid", ["3218528798"],
+            ["laura@email.com"]),
+    Contact("Juan Jose", "Cuervo", [],
+            ["juan@email.com"]),
+    Contact("Camila Fernanda", "Gómez Pérez", ["3109876543", "6053456789"],
+            ["camila@gmail.com", "cfperez@work.com"], "Amiga del colegio"),
+    Contact("Juan Sebastián", "Rodríguez Nieto", ["3165432187"],
+            ["juanrodriguez@email.com", "juanse@utb.edu.co"],
+            "Compañero de trabajo en desarrollo"),
+    Contact("Valeria Sofía", "Martínez López", ["3245678912"],
+            ["valeria.martinez@email.com"], "Prima"),
+    Contact("Santiago Andrés", "Ramírez Ortega", ["3147896541"],
+            ["santi.ramirez@email.com", "sramirez@empresa.com"], "Vecino"),
+    Contact("Mariana Alejandra", "Fernández Castro", ["3223344556"],
+            ["mariana.fernandez@email.com"], "Compañera de universidad"),
+    Contact("Luis Fernando", "Torres Pineda", ["3001122334"],
+            ["luis.torres@email.com", "ltorres@trabajo.com"], "Colega de proyectos"),
+    Contact("Andrea Carolina", "Hernández Gil", ["3056677889"],
+            ["andrea.hernandez@email.com"], "Amiga del gimnasio"),
+    Contact("Carlos Eduardo", "Mendoza Ruiz", ["3189988776", "6054567890"],
+            ["carlos.mendoza@email.com", "carlos@empresa.com"], "Jefe en el trabajo"),
+    Contact("Paula Daniela", "Salazar Mejía", ["3207766554"],
+            ["paula.salazar@email.com"], "Compañera de clases"),
+    Contact("Felipe Esteban", "Castillo Vargas", ["3125588996"],
+            ["felipe.castillo@email.com", "felipecastillo@work.com"], "Hermano de un amigo"),
+    Contact("Gabriela Isabel", "López Cárdenas", ["3012244668"],
+            ["gabriela.lopez@email.com"], "Prima segunda"),
+    Contact("Ricardo Antonio", "Ortega Salas", ["3234455667"],
+            ["ricardo.ortega@email.com", "rortega@universidad.edu"], "Profesor de matemáticas"),
+    Contact("Natalia Fernanda", "Pérez Ríos", ["3156677880"],
+            ["natalia.perez@email.com", "nfernanda@company.com"], "Amiga de la infancia"),
+    Contact("Jorge Andrés", "Ramírez Vargas", [],
+            ["jorge.ramirez@email.com"], "Colega en el trabajo"),
+    Contact("Daniela Sofía", "Gutiérrez Muñoz", ["3114455667"],
+            ["daniela.gutierrez@email.com", "daniela@startup.com"], "Excompañera de universidad"),
+    Contact("Alejandro Manuel", "Suárez Pacheco", ["3199988771"],
+            ["alejandro.suarez@email.com"], "Tío"),
+    Contact("Patricia Elena", "Navarro Acosta", ["3025566778"],
+            ["patricia.navarro@email.com", "pnavarro@empresa.com"], "Vecina de la familia"),
+    Contact("Fernando Javier", "Herrera Rojas", ["3208899776"],
+            ["fernando.herrera@email.com"], "Amigo del barrio"),
+    Contact("Vanessa María", "Muñoz Delgado", ["3052233445"],
+            ["vanessa.munoz@email.com", "vmuñoz@investigacion.edu"], "Colega en investigación"),
+    Contact("Miguel Ángel", "Vega López", ["3146677889"],
+            ["miguel.vega@email.com", "mvega@soccerclub.com"], "Compañero de equipo de fútbol"),
+    Contact("Lucía Alejandra", "Castaño Torres", ["3177788996"],
+            ["lucia.castano@email.com"], "Hermana de un amigo"),
+    Contact("Raúl Ernesto", "Mendoza Solís", ["3223344551"],
+            ["raul.mendoza@email.com", "rmendoza@startup.co"], "Amigo de la universidad"),
+    Contact("Tatiana Beatriz", "Ríos Sánchez", ["3031122335"],
+            ["tatiana.rios@email.com", "tbeatriz@tech.com"], "Colega en tecnología"),
+    Contact("Esteban Julián", "Peña Fuentes", ["3195566778"],
+            ["esteban.pena@email.com"], "Primo lejano"),
+    Contact("Carolina Andrea", "Montoya León", ["3047788996"],
+            ["carolina.montoya@email.com", "cmontoya@fashion.com"], "Amiga diseñadora"),
+    Contact("Sofía Camila", "Delgado Ruiz", ["3203344557"],
+            ["sofia.delgado@email.com"], "Hermana de un amigo"),
+]
 class Validator:
     """Clase para validar únicamente el formato de los datos de entrada"""
     
@@ -111,32 +178,29 @@ class ContactManager:
         self.contacts: List[Contact] = []
         self.MAX_CONTACTS_FREE_VERSION = 33
 
-    def add_contact(self, contact_data: dict) -> tuple[bool, Optional[str], Optional[Contact]]:
-        """Añade un nuevo contacto verificando duplicados"""
-        # Verificar duplicados de teléfono
-        for phone in contact_data['phones']:
-            if self._is_phone_duplicate(phone):
-                return False, f"El teléfono {phone} ya existe en otro contacto", None
-            
-        if self._is_name_duplicate(contact_data['first_name'], contact_data['last_name']):
-            return False, "Ya existe un contacto con este nombre y apellido", None
-
-        contact = Contact(**contact_data)
-        self.contacts.append(contact)
-        return True, None, contact
-
     def update_contact(self, contact: Contact, new_data: dict) -> tuple[bool, Optional[str]]:
-        """Actualiza un contacto existente verificando duplicados"""
-        for phone in new_data['phones']:
-            if self._is_phone_duplicate(phone, exclude=contact):
-                return False, f"El teléfono {phone} ya existe en otro contacto"
-            
-        if self._is_name_duplicate(new_data['first_name'], new_data['last_name'], exclude=contact):
-            return False, "Ya existe un contacto con este nombre y apellido"
+        """
+        Actualiza un contacto existente.
+        Retorna: (éxito, mensaje_de_error)
+        """
+        try:
+            for key, value in new_data.items():
+                setattr(contact, key, value)
+            return True, None
+        except Exception as e:
+            return False, str(e)
 
-        for key, value in new_data.items():
-            setattr(contact, key, value)
-        return True, None
+    def add_contact(self, contact_data: dict) -> tuple[bool, Optional[str], Optional[Contact]]:
+        """
+        Añade un nuevo contacto.
+        Retorna: (éxito, mensaje_de_error, contacto_creado)
+        """
+        try:
+            contact = Contact(**contact_data)
+            self.contacts.append(contact)
+            return True, None, contact
+        except Exception as e:
+            return False, str(e), None
 
     def _is_phone_duplicate(self, phone: str, exclude: Optional[Contact] = None) -> bool:
         """Verifica si el teléfono ya existe"""
@@ -159,21 +223,37 @@ class ContactManager:
         )
 
     def search_contacts(self, query: str) -> List[Contact]:
-        """Busca contactos por nombre, teléfono o descripción"""
+        """Busca contactos por nombre, teléfono, correo electrónico o descripción."""
         if not query.strip():
             return sorted(self.contacts, key=lambda x: x.full_name.lower())
-            
+
         normalized_query = Validator.normalize_text(query)
-        filtered_contacts = [
-            c for c in self.contacts
-            if any(
-                normalized_query in Validator.normalize_text(field)
-                for field in [c.full_name, *c.phones, c.description]
-            )
-        ]
+        filtered_contacts = []
+
+        for contact in self.contacts:
+            # Buscar en el nombre completo
+            if normalized_query in Validator.normalize_text(contact.full_name):
+                filtered_contacts.append(contact)
+                continue
+            
+            # Buscar en los teléfonos
+            if any(normalized_query in Validator.normalize_text(phone) for phone in contact.phones):
+                filtered_contacts.append(contact)
+                continue
+            
+            # Buscar en los correos electrónicos
+            if any(normalized_query in Validator.normalize_text(email) for email in contact.emails):
+                filtered_contacts.append(contact)
+                continue
+            
+            # Buscar en la descripción
+            if normalized_query in Validator.normalize_text(contact.description):
+                filtered_contacts.append(contact)
+                continue
+            
         return sorted(filtered_contacts, key=lambda x: x.full_name.lower())
 class ContactForm(tk.Toplevel):
-    
+    """Clase encargada de gestionar los form para añadir y editar contactos"""
     def __init__(self, parent, contact_manager: ContactManager, on_save: Callable, 
                  contact: Optional[Contact] = None):
         super().__init__(parent)
@@ -188,43 +268,102 @@ class ContactForm(tk.Toplevel):
             self.load_contact_data()
 
     def setup_form(self):
-        # Campos de entrada básicos
-        self.create_labeled_entry("Nombre:", "first_name", pady=(20,0))
-        self.create_labeled_entry("Apellido:", "last_name")
-        # Campo de teléfonos
-        ttk.Label(self, text="Telefonos (uno por línea):", font=('Arial', 10)).pack(padx=20, pady=(10,0))
-        # Validación en tiempo real para el campo de teléfonos
-        def validate_phone_input(event):
-            # Permitir teclas especiales (Backspace, Delete, etc.)
-            if event.keysym in {'BackSpace', 'Delete', 'Left', 'Right'}:
-                return True
+        # Campos de entrada básicos con límite de 30 caracteres
+        self.create_labeled_entry("Nombre:", "first_name", 50, pady=(20,0))
+        self.create_labeled_entry("Apellido:", "last_name", 50)
 
-            # Validar el carácter ingresado
-            char = event.char
-            if re.match(r'^[\d\s\+\-\(\)]$', char):
-                return True
-            else:
-                return False
-
-        self.phones_text = tk.Text(self, height=4, font=('Arial', 10))
-        self.phones_text.pack(padx=20)
-        self.phones_text.bind('<Key>', lambda e: validate_phone_input(e) or "break")
-        ttk.Label(self, text="Emails (uno por línea):", font=('Arial', 10)).pack(padx=20, pady=(10,0))
-        self.emails_text = tk.Text(self, height=4, font=('Arial', 10))
-        self.emails_text.pack(padx=20)
+        # Configurar Text widgets con validación
+        self.setup_phones_text()
+        self.setup_emails_text()
+        self.setup_description_text()
         
-        ttk.Label(self, text="Descripción:", font=('Arial', 10)).pack(padx=20, pady=(10,0))
-        self.description_text = tk.Text(self, height=4, font=('Arial', 10))
-        self.description_text.pack(padx=20)
-        
+        # Botón de guardar
         ttk.Button(self, text="Guardar", command=self.save_contact).pack(pady=20)
+    def setup_phones_text(self):
+        ttk.Label(self, text="Teléfonos (uno por línea, max 10):").pack(padx=20, pady=(10,0))
+        self.phones_text = tk.Text(self, height=4)
+        self.phones_text.pack(padx=20)
+        self.phones_text.bind('<Key>', self.on_phone_key)
+        self.phones_text.bind('<<Modified>>', self.on_phones_modified)
 
-    def create_labeled_entry(self, label: str, attr_name: str, **kwargs):
+    def setup_emails_text(self):
+        ttk.Label(self, text="Emails (uno por línea, max 50):").pack(padx=20, pady=(10,0))
+        self.emails_text = tk.Text(self, height=4)
+        self.emails_text.pack(padx=20)
+        self.emails_text.bind('<Key>', self.on_email_key)
+        self.emails_text.bind('<<Modified>>', self.on_emails_modified)
+
+    def setup_description_text(self):
+        ttk.Label(self, text="Descripción (max 200):").pack(padx=20, pady=(10,0))
+        self.description_text = tk.Text(self, height=4)
+        self.description_text.pack(padx=20)
+        self.description_text.bind('<<Modified>>', self.on_description_modified)
+
+    def create_labeled_entry(self, label: str, attr_name: str, max_length: int, **kwargs):
         ttk.Label(self, text=label).pack(padx=20, **kwargs)
-        entry = ttk.Entry(self)
+        validate_cmd = (self.register(self.validate_entry_length), '%P', str(max_length))
+        entry = ttk.Entry(self, validate="key", validatecommand=validate_cmd)
         entry.pack(padx=20)
         setattr(self, f"{attr_name}_entry", entry)
 
+    def validate_entry_length(self, new_text, max_length):
+        return len(new_text) <= int(max_length)
+
+    def on_phone_key(self, event):
+        # Permitir teclas especiales (Backspace, Delete, flechas, etc.)
+        allowed_keys = {'BackSpace', 'Delete', 'Left', 'Right', 'Up', 'Down', 'Return'}
+        if event.keysym in allowed_keys:
+            return
+
+        # Validar el carácter ingresado
+        char = event.char
+        if not re.match(r'^[\d\s\+\-\(\)]$', char): 
+            return "break"
+
+        # Validar longitud máxima por línea
+        line = self.phones_text.index("insert").split('.')[0]
+        current_line = self.phones_text.get(f"{line}.0", f"{line}.end")
+        if len(current_line) >= 10:
+            return "break"
+
+    def on_email_key(self, event):
+        allowed = {'BackSpace', 'Delete', 'Left', 'Right', 'Up', 'Down', 'Return'}
+        if event.keysym in allowed:
+            return
+        line = self.emails_text.index("insert").split('.')[0]
+        current_line = self.emails_text.get(f"{line}.0", f"{line}.end")
+        if len(current_line) >= 50:
+            return "break"
+
+    def on_description_modified(self, event):
+        if self.description_text.edit_modified():
+            content = self.description_text.get("1.0", "end-1c")
+            if len(content) > 200:
+                self.description_text.delete("1.0", "end")
+                self.description_text.insert("1.0", content[:200])
+                messagebox.showwarning("Límite excedido", "Descripción máxima: 200 caracteres")
+            self.description_text.edit_modified(False)
+
+    def on_phones_modified(self, event):
+        if self.phones_text.edit_modified():
+            lines = self.phones_text.get("1.0", "end-1c").split('\n')
+            corrected = [line[:20] for line in lines]
+            if any(len(line) > 20 for line in lines):
+                self.phones_text.delete("1.0", "end")
+                self.phones_text.insert("1.0", '\n'.join(corrected))
+                messagebox.showwarning("Límite excedido", "Máximo 20 caracteres por teléfono")
+            self.phones_text.edit_modified(False)
+
+    def on_emails_modified(self, event):
+        if self.emails_text.edit_modified():
+            lines = self.emails_text.get("1.0", "end-1c").split('\n')
+            corrected = [line[:50] for line in lines]
+            if any(len(line) > 50 for line in lines):
+                self.emails_text.delete("1.0", "end")
+                self.emails_text.insert("1.0", '\n'.join(corrected))
+                messagebox.showwarning("Límite excedido", "Máximo 50 caracteres por email")
+            self.emails_text.edit_modified(False)
+    
     def load_contact_data(self):
         self.first_name_entry.insert(0, self.contact.first_name)
         self.last_name_entry.insert(0, self.contact.last_name)
@@ -275,31 +414,39 @@ class ContactForm(tk.Toplevel):
 
         return True, None, warnings
     def save_contact(self):
+        # Obtener los datos del formulario
         data = self.get_form_data()
+
+        # Validar y procesar los datos
         is_valid, error_msg, warnings = self.validate_and_process_data(data)
 
+        # Si hay un error crítico, mostrar mensaje y salir
         if not is_valid:
             messagebox.showerror("Error", error_msg)
             return
 
+        # Si hay advertencias, preguntar al usuario si desea continuar
         if warnings:
-            warning_message = "\n".join(warnings) + "\n\n¿Continuar?"
+            warning_message = "\n".join(warnings) + "\n\n¿Desea continuar?"
             if not messagebox.askyesno("Advertencias", warning_message):
-                return
+                return  # El usuario decidió no continuar
 
-        # Usar métodos del ContactManager correctamente
+        # Guardar el contacto
         if self.contact:
+            # Actualizar contacto existente
             success, error = self.contact_manager.update_contact(self.contact, data)
             if not success:
                 messagebox.showerror("Error", error)
                 return
         else:
+            # Crear nuevo contacto
             success, error, new_contact = self.contact_manager.add_contact(data)
             if not success:
                 messagebox.showerror("Error", error)
                 return
             self.contact = new_contact
 
+        # Notificar éxito y cerrar el formulario
         self.on_save(self.contact)
         self.destroy()
         messagebox.showinfo("Éxito", "Contacto guardado correctamente")
