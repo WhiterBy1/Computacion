@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 from dataclasses import dataclass
 from typing import List, Dict, Optional
+from tabulate import tabulate
 
 
 @dataclass
@@ -173,35 +174,124 @@ class Venta:
         return self.subtotal + self.calcular_impuesto()
 
     def generar_factura(self) -> str:
-        """Genera el texto de la factura."""
+        """Genera el texto de la factura usando tabulate para un mejor formato."""
+        # Preparar los datos para la tabla
+        table_data = []
+        for item in self.items:
+            table_data.append([
+                item['code'],
+                item['name'],
+                f"${item['price']:,.0f}",
+                f"${item['precio_final']:,.0f}",
+                f"{item['quantity']:.2f}",
+                item['unit'],
+                f"${item['total']:,.0f}"
+            ])
+
+        # Definir headers
+        headers = ['Código', 'Producto', 'Precio', 'Precio Final', 
+                  'Cantidad', 'Unidad', 'Total']
+
+        # Generar la tabla principal
+        tabla_productos = tabulate(
+            table_data,
+            headers=headers,
+            tablefmt='grid',  # Puedes usar: grid, fancy_grid, pipe, orgtbl, etc.
+            numalign='right',
+            stralign='left'
+        )
+
+        # Calcular totales
         tax = self.calcular_impuesto()
         total = self.calcular_total()
 
-        invoice = [
-            "=== FACTURA DE VENTA ===\n",
-            f"{'Código':<8} {'Producto':<25} {'Precio':<12} "
-            f"{'Precio Final':<12} {'Cantidad':<10} {'Unidad':<8} {'Total':<12}"
-        ]
+        # Generar tabla de totales
+        tabla_totales = tabulate(
+            [
+                ['Subtotal:', f"${self.subtotal:,.0f}"],
+                ['IVA (19%):', f"${tax:,.0f}"],
+                ['TOTAL:', f"${total:,.0f}"]
+            ],
+            tablefmt='grid',
+            numalign='right',
+            stralign='left'
+        )
 
-        invoice.append("-" * 85)
+        # Combinar todo
+        factura_completa = (
+            "\n=== FACTURA DE VENTA ===\n\n"
+            f"{tabla_productos}\n\n"
+            f"{tabla_totales}\n"
+        )
 
-        for item in self.items:
-            invoice.append(
-                f"{item['code']:<8} {item['name'][:24]:<25} "
-                f"${item['price']:>9,.0f} ${item['precio_final']:>11,.0f} "
-                f"{item['quantity']:>9.2f} {item['unit']:<8} ${item['total']:>10,.0f}"
-            )
+        return factura_completa
 
-        invoice.extend([
-            "\n" + "=" * 85,
-            f"{'Subtotal:':<65} ${self.subtotal:>18,.0f}",
-            f"{'IVA (19%):':<65} ${tax:>18,.0f}",
-            f"{'TOTAL:':<65} ${total:>18,.0f}",
-            "=" * 85
-        ])
-
-        return '\n'.join(invoice)
-
+class InvoiceWindow(tk.Toplevel):
+    """Ventana personalizada para mostrar la factura."""
+    
+    def __init__(self, parent, invoice_text):
+        super().__init__(parent)
+        
+        # Configurar ventana
+        self.title("Venta Finalizada")
+        self.geometry("800x600")
+        self.minsize(900, 600)
+        self.maxsize(900, 600)
+        
+        # Hacer la ventana modal
+        self.transient(parent)
+        self.grab_set()
+        
+        # Configurar grid
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+        
+        # Añadir mensaje de éxito
+        success_frame = ttk.Frame(self)
+        success_frame.grid(row=0, column=0, padx=10, pady=5, sticky="ew")
+        
+        ttk.Label(
+            success_frame,
+            text="Venta procesada exitosamente",
+            font=("TkDefaultFont", 10, "bold")
+        ).pack(pady=5)
+        
+        # Crear área de texto para la factura
+        self.invoice_text = scrolledtext.ScrolledText(
+            self,
+            wrap=tk.NONE,  # Desactivar wrap para mantener el formato
+            font=('Courier New', 10),
+            width=100,
+            height=30
+        )
+        self.invoice_text.grid(row=1, column=0, padx=10, pady=5, sticky="nsew")
+        
+        # Insertar texto de la factura
+        self.invoice_text.insert("1.0", invoice_text)
+        self.invoice_text.configure(state="disabled")
+        
+        # Botón de cerrar
+        button_frame = ttk.Frame(self)
+        button_frame.grid(row=3, column=0, pady=10)
+        
+        ttk.Button(
+            button_frame,
+            text="Aceptar",
+            command=self.destroy,
+            style="Accent.TButton"
+        ).pack(padx=5, pady=5)
+        
+        # Centrar la ventana
+        self.center_window()
+        
+    def center_window(self):
+        """Centra la ventana en la pantalla."""
+        self.update_idletasks()
+        width = self.winfo_width()
+        height = self.winfo_height()
+        x = (self.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.winfo_screenheight() // 2) - (height // 2)
+        self.geometry(f'{width}x{height}+{x}+{y}')
 
 class SalesApp(tk.Tk):
     """Interfaz gráfica de la aplicación de ventas."""
@@ -362,11 +452,8 @@ class SalesApp(tk.Tk):
             )
             return
 
-        messagebox.showinfo(
-            "Venta Finalizada",
-            "Venta procesada exitosamente\n\n" +
-            self.venta.generar_factura()
-        )
+        # Crear ventana personalizada para mostrar la factura
+        InvoiceWindow(self, self.venta.generar_factura())
         self.reset_sale()
 
     def reset_sale(self) -> None:
@@ -374,7 +461,6 @@ class SalesApp(tk.Tk):
         self.venta = Venta()
         self.clear_inputs()
         self.update_invoice_display()
-
 
 def main():
     """Punto de entrada principal de la aplicación."""
