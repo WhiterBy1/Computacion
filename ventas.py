@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 from dataclasses import dataclass
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Literal
 from tabulate import tabulate
 
 
@@ -11,7 +11,7 @@ class Product:
     code: str
     name: str
     price: float
-    unit: str
+    unit: Literal['unidad','libra','kilo']
 
     def calcular_descuento(self) -> float:
         """
@@ -75,21 +75,30 @@ class Validador:
     """Clase que valida las entradas del usuario."""
 
     @staticmethod
-    def validar_cantidad(cantidad: str) -> Optional[float]:
+    def validar_cantidad(cantidad: str, unidad: str) -> Optional[float]:
         """
-        Valida que la cantidad ingresada sea un número positivo.
+        Valida que la cantidad ingresada sea un número positivo y coincida con el tipo de unidad.
 
         Args:
             cantidad (str): La cantidad ingresada por el usuario.
+            unidad (str): La unidad del producto ('unidad', 'kilo', 'libra')
 
         Returns:
             Optional[float]: La cantidad validada como float si es válida, None en caso contrario.
         """
         try:
-            cantidad = float(cantidad)
-            if cantidad <= 0:
-                raise ValueError
-            return cantidad
+            cantidad_float = float(cantidad)
+            if cantidad_float <= 0:
+                return None
+                
+            if unidad == 'unidad':
+                # Para unidades, verificar que sea un número entero
+                if not cantidad_float.is_integer():
+                    return None
+                
+            # Para kilos y libras, permitir decimales
+            return cantidad_float
+            
         except ValueError:
             return None
 
@@ -400,31 +409,35 @@ class SalesApp(tk.Tk):
 
     def add_product(self) -> None:
         """Añade un producto a la factura."""
-        producto = self.product_combobox.get()
+        producto_seleccionado = self.product_combobox.get()
         cantidad = self.quantity_entry.get()
 
-        if not Validador.validar_producto(producto):
+        if not Validador.validar_producto(producto_seleccionado):
             messagebox.showerror(
                 "Error",
                 "Por favor seleccione un producto"
             )
             return
 
-        cantidad_validada = Validador.validar_cantidad(cantidad)
-        if cantidad_validada is None:
-            messagebox.showerror(
-                "Error",
-                "La cantidad debe ser un número positivo"
-            )
-            return
-
-        producto_codigo = producto.split(' - ')[0]
+        # Obtener el producto primero para conocer su unidad
+        producto_codigo = producto_seleccionado.split(' - ')[0]
         producto = self.product_manager.find_product(producto_codigo)
         if not producto:
             messagebox.showerror(
                 "Error",
                 "Producto no encontrado"
             )
+            return
+
+        # Validar la cantidad según la unidad del producto
+        cantidad_validada = Validador.validar_cantidad(cantidad, producto.unit)
+        if cantidad_validada is None:
+            if producto.unit == 'unidad':
+                mensaje = "La cantidad debe ser un número entero positivo para productos vendidos por unidad"
+            else:
+                mensaje = f"La cantidad debe ser un número positivo para productos vendidos por {producto.unit}"
+            
+            messagebox.showerror("Error", mensaje)
             return
 
         self.venta.agregar_producto(producto, cantidad_validada)
