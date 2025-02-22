@@ -294,6 +294,191 @@ class InvoiceWindow(tk.Toplevel):
         y = (self.winfo_screenheight() // 2) - (height // 2)
         self.geometry(f'{width}x{height}+{x}+{y}')
 
+class ProductManagementWindow(tk.Toplevel):
+    """Ventana modal para gestionar productos de la venta actual."""
+    
+    def __init__(self, parent, venta):
+        super().__init__(parent)
+        
+        self.parent = parent
+        self.venta = venta
+        
+        # Configurar ventana
+        self.title("Gestionar Productos")
+        self.geometry("600x500")
+        self.minsize(600, 500)
+        self.maxsize(600, 500)
+        
+        # Hacer la ventana modal
+        self.transient(parent)
+        self.grab_set()
+        
+        # Configurar grid
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+        
+        self.setup_ui()
+        self.center_window()
+        
+    def setup_ui(self):
+        """Configura la interfaz de usuario de la ventana de gestión."""
+        # Frame principal
+        main_frame = ttk.Frame(self, padding="10")
+        main_frame.grid(row=0, column=0, sticky="nsew")
+        main_frame.grid_columnconfigure(0, weight=1)
+        
+        # Lista de productos
+        list_frame = ttk.LabelFrame(main_frame, text="Productos en la venta actual", padding="10")
+        list_frame.grid(row=0, column=0, sticky="nsew", pady=(0, 10))
+        list_frame.grid_columnconfigure(0, weight=1)
+        
+        # Crear Treeview para mostrar los productos
+        self.tree = ttk.Treeview(list_frame, columns=("code", "name", "quantity", "unit", "total"), 
+                                show="headings", selectmode="browse")
+        
+        # Configurar las columnas
+        self.tree.heading("code", text="Código")
+        self.tree.heading("name", text="Nombre")
+        self.tree.heading("quantity", text="Cantidad")
+        self.tree.heading("unit", text="Unidad")
+        self.tree.heading("total", text="Total")
+        
+        self.tree.column("code", width=80)
+        self.tree.column("name", width=200)
+        self.tree.column("quantity", width=80)
+        self.tree.column("unit", width=80)
+        self.tree.column("total", width=100)
+        
+        # Añadir scrollbar
+        scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+        
+        # Colocar Treeview y scrollbar
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        
+        # Frame para modificación
+        modify_frame = ttk.LabelFrame(main_frame, text="Modificar producto seleccionado", padding="10")
+        modify_frame.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
+        
+        # Entrada para nueva cantidad
+        ttk.Label(modify_frame, text="Nueva cantidad:").grid(row=0, column=0, padx=5, pady=5)
+        self.quantity_entry = ttk.Entry(modify_frame, width=15)
+        self.quantity_entry.grid(row=0, column=1, padx=5, pady=5)
+        
+        # Botones de acción
+        button_frame = ttk.Frame(modify_frame)
+        button_frame.grid(row=1, column=0, columnspan=2, pady=10)
+        
+        ttk.Button(
+            button_frame,
+            text="Actualizar Cantidad",
+            command=self.update_quantity,
+            style="Accent.TButton"
+        ).pack(side=tk.LEFT, padx=5)
+        
+        ttk.Button(
+            button_frame,
+            text="Eliminar Producto",
+            command=self.remove_product,
+            style="Danger.TButton"
+        ).pack(side=tk.LEFT, padx=5)
+        
+        # Botón de cerrar
+        ttk.Button(
+            main_frame,
+            text="Cerrar",
+            command=self.close_window
+        ).grid(row=2, column=0, pady=10)
+        
+        # Cargar productos
+        self.load_products()
+        
+    def load_products(self):
+        """Carga los productos en el Treeview."""
+        # Limpiar Treeview
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+            
+        # Insertar productos
+        for item in self.venta.items:
+            self.tree.insert("", "end", values=(
+                item["code"],
+                item["name"],
+                f"{item['quantity']:.2f}",
+                item["unit"],
+                f"${item['total']:,.0f}"
+            ))
+    
+    def update_quantity(self):
+        """Actualiza la cantidad del producto seleccionado."""
+        selected_item = self.tree.selection()
+        if not selected_item:
+            messagebox.showerror("Error", "Por favor seleccione un producto")
+            return
+            
+        item_values = self.tree.item(selected_item)["values"]
+        code = item_values[0]
+        new_quantity = self.quantity_entry.get()
+        
+        # Encontrar el producto en la venta
+        product = next((item for item in self.venta.items if item["code"] == code), None)
+        if not product:
+            return
+            
+        # Validar la nueva cantidad
+        cantidad_validada = Validador.validar_cantidad(new_quantity, product["unit"])
+        if cantidad_validada is None:
+            if product["unit"] == "unidad":
+                mensaje = "La cantidad debe ser un número entero positivo para productos vendidos por unidad"
+            else:
+                mensaje = f"La cantidad debe ser un número positivo para productos vendidos por {product['unit']}"
+            messagebox.showerror("Error", mensaje)
+            return
+            
+        # Actualizar cantidad y recalcular totales
+        product["quantity"] = cantidad_validada
+        product["total"] = product["price"] * cantidad_validada
+        self.venta.subtotal = sum(item["total"] for item in self.venta.items)
+        
+        # Actualizar UI
+        self.load_products()
+        self.parent.update_invoice_display()
+        self.quantity_entry.delete(0, tk.END)
+        messagebox.showinfo("Éxito", "Cantidad actualizada correctamente")
+    
+    def remove_product(self):
+        """Elimina el producto seleccionado."""
+        selected_item = self.tree.selection()
+        if not selected_item:
+            messagebox.showerror("Error", "Por favor seleccione un producto")
+            return
+            
+        if messagebox.askyesno("Confirmar", "¿Está seguro de que desea eliminar este producto?"):
+            item_values = self.tree.item(selected_item)["values"]
+            code = item_values[0]
+            
+            # Eliminar producto
+            self.venta.items = [item for item in self.venta.items if item["code"] != code]
+            self.venta.subtotal = sum(item["total"] for item in self.venta.items)
+            
+            # Actualizar UI
+            self.load_products()
+            self.parent.update_invoice_display()
+            messagebox.showinfo("Éxito", "Producto eliminado correctamente")
+    
+    def close_window(self):
+        """Cierra la ventana de gestión."""
+        self.destroy()
+    
+    def center_window(self):
+        """Centra la ventana en la pantalla."""
+        self.update_idletasks()
+        width = self.winfo_width()
+        height = self.winfo_height()
+        x = (self.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.winfo_screenheight() // 2) - (height // 2)
+        self.geometry(f'{width}x{height}+{x}+{y}')
 class SalesApp(tk.Tk):
     """Interfaz gráfica de la aplicación de ventas."""
 
@@ -363,29 +548,47 @@ class SalesApp(tk.Tk):
             row=1, column=1, padx=5, pady=5, sticky="w"
         )
 
+    
     def setup_buttons(self) -> None:
         """Configura los botones de acción."""
         buttons_frame = ttk.Frame(self.input_frame)
         buttons_frame.grid(row=2, column=0, columnspan=3, pady=10)
-
+        
         ttk.Button(
             buttons_frame,
             text="Añadir Producto",
             command=self.add_product,
             style="Accent.TButton"
         ).pack(side=tk.LEFT, padx=5)
-
+        
+        ttk.Button(
+            buttons_frame,
+            text="Gestionar Productos",
+            command=self.open_management_window
+        ).pack(side=tk.LEFT, padx=5)
+        
         ttk.Button(
             buttons_frame,
             text="Finalizar Venta",
             command=self.checkout
         ).pack(side=tk.LEFT, padx=5)
-
+        
         ttk.Button(
             buttons_frame,
             text="Nueva Venta",
             command=self.reset_sale
         ).pack(side=tk.LEFT, padx=5)
+    
+    def open_management_window(self):
+        """Abre la ventana de gestión de productos."""
+        if not self.venta.items:
+            messagebox.showwarning(
+                "Advertencia",
+                "No hay productos en la venta actual"
+            )
+            return
+        
+        ProductManagementWindow(self, self.venta)
 
     def setup_invoice_display(self) -> None:
         """Configura el área de visualización de la factura."""
