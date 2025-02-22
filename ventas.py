@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import List, Dict, Optional, Literal
 from tabulate import tabulate
 
-
 @dataclass
 class Product:
     """Clase que representa un producto."""
@@ -12,31 +11,6 @@ class Product:
     name: str
     price: float
     unit: Literal['unidad','libra','kilo']
-
-    def calcular_descuento(self) -> float:
-        """
-        Calcula el descuento aplicable según el rango de precios.
-
-        Returns:
-            float: Descuento aplicable al producto.
-        """
-        if self.price < 100000:
-            return 0.05  # 5% de descuento
-        elif 100000 <= self.price <= 500000:
-            return 0.0  # Sin descuento
-        else:
-            return 0.10  # 10% de descuento
-
-    def calcular_precio_final(self) -> float:
-        """
-        Calcula el precio final del producto después de aplicar el descuento.
-
-        Returns:
-            float: Precio final del producto.
-        """
-        descuento = self.calcular_descuento()
-        return self.price * (1 - descuento)
-
 
 class ProductManager:
     """Clase que define los productos y abarca la lógica de creación y búsqueda de productos."""
@@ -69,7 +43,6 @@ class ProductManager:
              if search_term in (product.code.lower(), product.name.lower())),
             None
         )
-
 
 class Validador:
     """Clase que valida las entradas del usuario."""
@@ -115,33 +88,44 @@ class Validador:
         """
         return bool(producto.strip())
 
-
-class TaxCalculator:
-    """Clase que calcula los impuestos."""
-
-    TAX_RATE = 0.19  # 19% IVA en Colombia
-
+class Venta:
+    """Clase que representa una venta, calcula el total e incluye impuestos."""
+    
+    def __init__(self):
+        """Inicializa una venta con una lista vacía de productos vendidos."""
+        self.items: List[Dict] = []
+        self.subtotal = 0.0
     @staticmethod
-    def calculate_tax(amount: float) -> float:
+    def calcular_descuento(price: float) -> float:
+        """
+        Calcula el descuento aplicable según el rango de precios.
+
+        Args:
+            price (float): Precio del producto.
+
+        Returns:
+            float: Descuento aplicable al producto.
+        """
+        if price < 100000:
+            return 0.05  # 5% de descuento
+        elif 100000 <= price <= 500000:
+            return 0.0  # Sin descuento
+        else:
+            return 0.10  # 10% de descuento
+        
+    @staticmethod
+    def calculate_tax(amount: float, tax_rate:float) -> float:
         """
         Calcula el impuesto para un monto dado.
 
         Args:
             amount (float): El monto sobre el cual se calculará el impuesto.
+            tax (float): El porcentaje de impuesto sobre el monto.
 
         Returns:
             float: El impuesto calculado.
         """
-        return round(amount * TaxCalculator.TAX_RATE, 2)
-
-
-class Venta:
-    """Clase que representa una venta, calcula el total e incluye impuestos."""
-
-    def __init__(self):
-        """Inicializa una venta con una lista vacía de productos vendidos."""
-        self.items: List[Dict] = []
-        self.subtotal = 0.0
+        return round(amount * tax_rate, 2)
 
     def agregar_producto(self, producto: Product, cantidad: float) -> None:
         """
@@ -151,8 +135,10 @@ class Venta:
             producto (Product): El producto a añadir.
             cantidad (float): La cantidad del producto.
         """
-        precio_final = producto.calcular_precio_final()
-        total = precio_final * cantidad
+        
+        precio_final = producto.price *  cantidad
+        descuento = self.calcular_descuento(precio_final)
+        total = precio_final * (1 - descuento) 
         existe_producto = next((item for item in self.items if item['code'] == producto.code), None)
         if not (existe_producto):
             self.items.append({
@@ -177,7 +163,7 @@ class Venta:
         Returns:
             float: Impuesto calculado.
         """
-        return TaxCalculator.calculate_tax(self.subtotal)
+        return self.calculate_tax(self.subtotal, tax_rate = 0.19) #TAX_RATE = 0.19  # 19% IVA en Colombia
 
     def calcular_total(self) -> float:
         """
@@ -491,7 +477,6 @@ def main():
     style.configure("Accent.TButton", font=("TkDefaultFont", 9, "bold"))
 
     app.mainloop()
-
 
 if __name__ == "__main__":
     main()
