@@ -153,16 +153,22 @@ class Venta:
         """
         precio_final = producto.calcular_precio_final()
         total = precio_final * cantidad
-        self.items.append({
-            'code': producto.code,
-            'name': producto.name,
-            'price': producto.price,
-            'precio_final': precio_final,
-            'quantity': cantidad,
-            'unit': producto.unit,
-            'total': total
-        })
-        self.subtotal += total
+        existe_producto = next((item for item in self.items if item['code'] == producto.code), None)
+        if not (existe_producto):
+            self.items.append({
+                'code': producto.code,
+                'name': producto.name,
+                'price': producto.price,
+                'precio_final': precio_final,
+                'quantity': cantidad,
+                'unit': producto.unit,
+                'total': total
+            })
+            self.subtotal += total
+        else:
+            existe_producto['quantity'] += cantidad
+            existe_producto['total'] = precio_final * existe_producto['quantity']
+            self.subtotal += total
 
     def calcular_impuesto(self) -> float:
         """
