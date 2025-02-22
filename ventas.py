@@ -21,18 +21,18 @@ class ProductManager:
     def create_products_test(self) -> List[Product]:
         """Crea una lista de productos con precios en COP."""
         return [
-            Product("COD1", "Coca-Cola 1L", 4500, "unidad"),
-            Product("COD2", "Agua 600ml", 2500, "unidad"),
-            Product("COD3", "Queso Campesino 1 libra", 12000, "libra"),
-            Product("COD4", "Pechuga de Pollo 1 libra", 10000, "libra"),
-            Product("COD5", "Papas Margarita 150g", 3500, "unidad"),
-            Product("COD6", "Arroz Diana 1kg", 4000, "kilo"),
-            Product("COD7", "Leche Alquería 1L", 3500, "unidad"),
-            Product("COD8", "Huevos x 30 unidades", 15000, "unidad"),
-            Product("COD9", "Carne Molida 1 libra", 18000, "libra"),
+            Product("COD1", "Agua 600ml", 2500, "unidad"),
+            Product("COD2", "Arroz Diana 1kg", 4000, "kilo"),
+            Product("COD3", "Carne Molida 1 libra", 18000, "libra"),
+            Product("COD4", "Café Juan Valdez 500g", 20000, "kilo"),
+            Product("COD5", "Coca-Cola 1L", 4500, "unidad"),
+            Product("COD6", "Galletas Saltín Noel", 2500, "unidad"),
+            Product("COD7", "Huevos x 30 unidades", 15000, "unidad"),
+            Product("COD8", "Leche Alquería 1L", 3500, "unidad"),
+            Product("COD9", "Papas Margarita 150g", 3500, "unidad"),
             Product("COD10", "Pan Bimbo Integral", 6000, "unidad"),
-            Product("COD11", "Café Juan Valdez 500g", 20000, "kilo"),
-            Product("COD12", "Galletas Saltín Noel", 2500, "unidad"),
+            Product("COD11", "Pechuga de Pollo 1 libra", 10000, "libra"),
+            Product("COD12", "Queso Campesino 1 libra", 12000, "libra"),
         ]
 
     def find_product(self, search_term: str) -> Optional[Product]:
@@ -95,6 +95,8 @@ class Venta:
         """Inicializa una venta con una lista vacía de productos vendidos."""
         self.items: List[Dict] = []
         self.subtotal = 0.0
+        self.total_iva = 0.0
+    
     @staticmethod
     def calcular_descuento(price: float) -> float:
         """
@@ -136,82 +138,113 @@ class Venta:
             cantidad (float): La cantidad del producto.
         """
         
-        precio_final = producto.price *  cantidad
-        descuento = self.calcular_descuento(precio_final)
-        total = precio_final * (1 - descuento) 
+        subtotal_producto = producto.price * cantidad
+        iva_producto = self.calculate_tax(subtotal_producto, 0.19)
+        descuento = self.calcular_descuento(subtotal_producto)
+        descuento_valor = subtotal_producto * descuento
+        total_con_descuento = subtotal_producto - descuento_valor + iva_producto
+        
         existe_producto = next((item for item in self.items if item['code'] == producto.code), None)
-        if not (existe_producto):
+        if not existe_producto:
             self.items.append({
                 'code': producto.code,
                 'name': producto.name,
                 'price': producto.price,
-                'precio_final': precio_final,
                 'quantity': cantidad,
                 'unit': producto.unit,
-                'total': total
+                'subtotal': subtotal_producto,
+                'iva': iva_producto,
+                'descuento_porcentaje': descuento * 100,
+                'descuento_valor': descuento_valor,
+                'total': total_con_descuento
             })
-            self.subtotal += total
+            self.subtotal += subtotal_producto
+            self.total_iva += iva_producto
         else:
-            existe_producto['quantity'] += cantidad
-            existe_producto['total'] = precio_final * existe_producto['quantity']
-            self.subtotal += total
-
-    def calcular_impuesto(self) -> float:
-        """
-        Calcula el impuesto aplicable a la venta.
-
-        Returns:
-            float: Impuesto calculado.
-        """
-        return self.calculate_tax(self.subtotal, tax_rate = 0.19) #TAX_RATE = 0.19  # 19% IVA en Colombia
+            # Actualizar cantidad y recalcular
+            nueva_cantidad = existe_producto['quantity'] + cantidad
+            nuevo_subtotal = producto.price * nueva_cantidad
+            nuevo_iva = self.calculate_tax(nuevo_subtotal, 0.19)
+            nuevo_descuento = self.calcular_descuento(nuevo_subtotal)
+            nuevo_descuento_valor = nuevo_subtotal * nuevo_descuento
+            nuevo_total = nuevo_subtotal - nuevo_descuento_valor + nuevo_iva
+            
+            # Restar valores anteriores
+            self.subtotal -= existe_producto['subtotal']
+            self.total_iva -= existe_producto['iva']
+            
+            # Actualizar item
+            existe_producto.update({
+                'quantity': nueva_cantidad,
+                'subtotal': nuevo_subtotal,
+                'iva': nuevo_iva,
+                'descuento_porcentaje': nuevo_descuento * 100,
+                'descuento_valor': nuevo_descuento_valor,
+                'total': nuevo_total
+            })
+            
+            # Sumar nuevos valores
+            self.subtotal += nuevo_subtotal
+            self.total_iva += nuevo_iva
 
     def calcular_total(self) -> float:
         """
-        Calcula el total de la venta (subtotal + impuesto).
+        Calcula el total de la venta incluyendo descuentos e IVA.
 
         Returns:
             float: Total de la venta.
         """
-        return self.subtotal + self.calcular_impuesto()
+        total_descuentos = sum(item['descuento_valor'] for item in self.items)
+        return self.subtotal - total_descuentos + self.total_iva
 
     def generar_factura(self) -> str:
         """Genera el texto de la factura usando tabulate para un mejor formato."""
         # Preparar los datos para la tabla
         table_data = []
+        total_descuentos = 0
         for item in self.items:
+            total_descuentos += item['descuento_valor']
             table_data.append([
                 item['code'],
                 item['name'],
                 f"${item['price']:,.0f}",
-                f"${item['precio_final']:,.0f}",
                 f"{item['quantity']:.2f}",
                 item['unit'],
+                f"${item['subtotal']:,.0f}",
+                f"{item['descuento_porcentaje']:.0f}%",
+                f"${item['iva']:,.0f}",
                 f"${item['total']:,.0f}"
             ])
 
         # Definir headers
-        headers = ['Código', 'Producto', 'Precio', 'Precio Final', 
-                  'Cantidad', 'Unidad', 'Total']
+        headers = [
+            'Código', 
+            'Producto', 
+            'Precio/Unidad', 
+            'Cantidad',
+            'Unidad',
+            'Subtotal',
+            'Descuento',
+            'iva',
+            'Total'
+        ]
 
         # Generar la tabla principal
         tabla_productos = tabulate(
             table_data,
             headers=headers,
-            tablefmt='grid',  # Puedes usar: grid, fancy_grid, pipe, orgtbl, etc.
+            tablefmt='grid',  
             numalign='right',
             stralign='left'
         )
-
-        # Calcular totales
-        tax = self.calcular_impuesto()
-        total = self.calcular_total()
 
         # Generar tabla de totales
         tabla_totales = tabulate(
             [
                 ['Subtotal:', f"${self.subtotal:,.0f}"],
-                ['IVA (19%):', f"${tax:,.0f}"],
-                ['TOTAL:', f"${total:,.0f}"]
+                ['Total IVA:', f"${self.total_iva:,.0f}"],
+                ['Total Descuentos:', f"${total_descuentos:,.0f}"],
+                ['TOTAL A PAGAR (IVA incluido):', f"${self.calcular_total():,.0f}"]
             ],
             tablefmt='grid',
             numalign='right',
@@ -226,7 +259,6 @@ class Venta:
         )
 
         return factura_completa
-
 class InvoiceWindow(tk.Toplevel):
     """Ventana personalizada para mostrar la factura."""
     
@@ -235,9 +267,9 @@ class InvoiceWindow(tk.Toplevel):
         
         # Configurar ventana
         self.title("Venta Finalizada")
-        self.geometry("800x600")
-        self.minsize(900, 600)
-        self.maxsize(900, 600)
+        self.geometry("1050x600")
+        self.minsize(1050, 600)
+        self.maxsize(1050, 600)
         
         # Hacer la ventana modal
         self.transient(parent)
@@ -426,6 +458,11 @@ class ProductManagementWindow(tk.Toplevel):
         if not product:
             return
             
+        # Encontrar el producto original en el product_manager
+        original_product = self.parent.product_manager.find_product(code)
+        if not original_product:
+            return
+            
         # Validar la nueva cantidad
         cantidad_validada = Validador.validar_cantidad(new_quantity, product["unit"])
         if cantidad_validada is None:
@@ -436,10 +473,30 @@ class ProductManagementWindow(tk.Toplevel):
             messagebox.showerror("Error", mensaje)
             return
             
-        # Actualizar cantidad y recalcular totales
-        product["quantity"] = cantidad_validada
-        product["total"] = product["price"] * cantidad_validada
-        self.venta.subtotal = sum(item["total"] for item in self.venta.items)
+        # Restar valores anteriores
+        self.venta.subtotal -= product['subtotal']
+        self.venta.total_iva -= product['iva']
+        
+        # Calcular nuevos valores
+        nuevo_subtotal = original_product.price * cantidad_validada
+        nuevo_iva = self.venta.calculate_tax(nuevo_subtotal, 0.19)
+        nuevo_descuento = self.venta.calcular_descuento(nuevo_subtotal)
+        nuevo_descuento_valor = nuevo_subtotal * nuevo_descuento
+        nuevo_total = nuevo_subtotal - nuevo_descuento_valor + nuevo_iva
+        
+        # Actualizar producto
+        product.update({
+            'quantity': cantidad_validada,
+            'subtotal': nuevo_subtotal,
+            'iva': nuevo_iva,
+            'descuento_porcentaje': nuevo_descuento * 100,
+            'descuento_valor': nuevo_descuento_valor,
+            'total': nuevo_total
+        })
+        
+        # Actualizar totales de la venta
+        self.venta.subtotal += nuevo_subtotal
+        self.venta.total_iva += nuevo_iva
         
         # Actualizar UI
         self.load_products()
@@ -458,9 +515,15 @@ class ProductManagementWindow(tk.Toplevel):
             item_values = self.tree.item(selected_item)["values"]
             code = item_values[0]
             
-            # Eliminar producto
-            self.venta.items = [item for item in self.venta.items if item["code"] != code]
-            self.venta.subtotal = sum(item["total"] for item in self.venta.items)
+            # Encontrar el producto a eliminar
+            producto_a_eliminar = next((item for item in self.venta.items if item["code"] == code), None)
+            if producto_a_eliminar:
+                # Restar valores de los totales
+                self.venta.subtotal -= producto_a_eliminar['subtotal']
+                self.venta.total_iva -= producto_a_eliminar['iva']
+                
+                # Eliminar producto
+                self.venta.items = [item for item in self.venta.items if item["code"] != code]
             
             # Actualizar UI
             self.load_products()
@@ -498,8 +561,8 @@ class SalesApp(tk.Tk):
     def setup_window(self) -> None:
         """Configura la ventana principal."""
         self.title("Sistema de Ventas - Tienda Colombiana")
-        self.geometry("900x600")
-        self.minsize(900, 600)
+        self.geometry("1050x600")
+        self.minsize(1050, 600)
 
         # Configura el peso de las columnas y filas
         self.grid_columnconfigure(0, weight=1)
@@ -662,10 +725,13 @@ class SalesApp(tk.Tk):
 
         # Crear ventana personalizada para mostrar la factura
         InvoiceWindow(self, self.venta.generar_factura())
-        self.reset_sale()
+        self.reset_sale(finish=True)
 
-    def reset_sale(self) -> None:
+    def reset_sale(self, finish: bool = False) -> None:
         """Reinicia el sistema para una nueva venta."""
+        if not finish:
+            if not messagebox.askokcancel("Nueva venta", "Estas seguro que deseas borrar esta venta e iniciar otra?"):
+                return
         self.venta = Venta()
         self.clear_inputs()
         self.update_invoice_display()
