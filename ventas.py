@@ -982,7 +982,8 @@ class SalesApp(tk.Tk):
         if not self.venta.items:
             messagebox.showerror("Error", "No hay productos en la venta")
             return
-
+        if not messagebox.askyesno("Finalizar venta", "¿Está seguro de que desea finalizar esta venta?"):
+                return
         # Abrir ventana de datos del cliente (modal)
         client_window = ClientInfoWindow(self, self.venta)
         self.wait_window(client_window)
