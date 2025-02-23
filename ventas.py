@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+import random
 import re
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
@@ -92,12 +94,39 @@ class Validador:
 
 class Venta:
     """Clase que representa una venta, calcula el total e incluye impuestos."""
+    COMPANY_INFO = {
+        "nit": "901.234.567-8",
+        "nombre": "TIENDA COLOMBIANA SAS",
+        "direccion": "Calle 123 # 45-67, Cartagena de Indias D.T. y C.",
+        "telefono": "(601) 2345678",
+        "email": "ventas@tiendacolombiana.com.co",
+        "regimen": "Régimen Común",
+        "resolucion_dian": "Resolución DIAN Nº 123456789",
+        "fecha_resolucion": "2023-01-01"
+    }
+    
+    _numero_factura = 1  # Contador para numeración consecutiva
     
     def __init__(self):
-        """Inicializa una venta con una lista vacía de productos vendidos."""
         self.items: List[Dict] = []
         self.subtotal = 0.0
         self.total_iva = 0.0
+        self.numero_factura = Venta._numero_factura
+        self.fecha_emision = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        self.fecha_vencimiento = (datetime.now() + timedelta(days=30)).strftime("%d/%m/%Y")
+        self.cliente_info = {"nombre": "", "nit": ""}
+        self.forma_pago = "Contado"
+        self.numero_autorizacion = self.generar_numero_autorizacion()
+        Venta._numero_factura += 1
+
+    def generar_numero_autorizacion(self):
+        """Genera un numero aleatorio, No se comprueba ya que es una version de prueba de la aplicacion
+        para uso practivo se deveria verificar que no exista uno anterior registrado
+
+        Returns:
+            int: numero_autorizacion
+        """
+        return f"{random.randint(100000000000, 999999999999)}"
     
     @staticmethod
     def calcular_descuento(price: float) -> float:
@@ -201,6 +230,24 @@ class Venta:
 
     def generar_factura(self) -> str:
         """Genera el texto de la factura usando tabulate para un mejor formato."""
+        # Encabezado de la factura
+        factura_header = f"""{self.COMPANY_INFO['nombre']}
+            NIT: {self.COMPANY_INFO['nit']}
+            Dirección: {self.COMPANY_INFO['direccion']}
+            Tel: {self.COMPANY_INFO['telefono']} - Email: {self.COMPANY_INFO['email']}
+            {self.COMPANY_INFO['resolucion_dian']} - Fecha: {self.COMPANY_INFO['fecha_resolucion']}
+            {"="*80}
+            FACTURA ELECTRÓNICA DE VENTA N° {self.numero_factura}
+            Fecha de emisión: {self.fecha_emision}
+            Fecha de vencimiento: {self.fecha_vencimiento}
+            Número de autorización: {self.numero_autorizacion}
+            {"="*80}
+            Cliente: {self.cliente_info['nombre']}
+            NIT/CC: {self.cliente_info['nit']}
+            Forma de pago: {self.forma_pago}
+            {"-"*80}
+            """
+
         # Preparar los datos para la tabla
         table_data = []
         total_descuentos = 0
@@ -252,15 +299,25 @@ class Venta:
             numalign='right',
             stralign='left'
         )
-
+        # Pie de factura con datos legales
+        factura_footer = (
+            "\n" + "="*80 + "\n"
+            "IMPORTANTE:\n"
+            "Este documento es una representación impresa de un comprobante electrónico\n"
+            "Sujeto a revisión y verificación por parte de la DIAN\n"
+            f"IVA incluido del 19% - Régimen: {self.COMPANY_INFO['regimen']}\n"
+            "Gracias por su compra!"
+        )
         # Combinar todo
         factura_completa = (
             "\n=== FACTURA DE VENTA ===\n\n"
+            f"{factura_header}\n"
             f"{tabla_productos}\n\n"
             f"{tabla_totales}\n"
+            f"\n{factura_footer}"
         )
-
         return factura_completa
+    
 class InvoiceWindow(tk.Toplevel):
     """Ventana personalizada para mostrar la factura."""
     
@@ -589,7 +646,7 @@ class ClientInfoWindow(tk.Toplevel):
                 font=('Arial', 12, 'bold')).grid(row=0, column=0, columnspan=2, pady=10)
         
         # Campos del formulario
-        self.create_labeled_entry(main_frame, "Nombre completo*:", "nombre", 1, 80)
+        self.create_labeled_entry(main_frame, "Nombre completo*:", "nombre", 1, 80, name=True)
         self.create_labeled_entry(main_frame, "NIT/CC*:", "nit", 2, 15, self.validate_nit)
         self.create_payment_combobox(main_frame)
         
@@ -606,12 +663,27 @@ class ClientInfoWindow(tk.Toplevel):
         
         ttk.Button(btn_frame, text="Aceptar", command=self.guardar_datos).pack(side=tk.LEFT, padx=10)
         ttk.Button(btn_frame, text="Cancelar", command=self.destroy).pack(side=tk.LEFT, padx=10)
-    
-    def create_labeled_entry(self, parent, label, field, row, max_length, validation=None):
+    def validate_nit_entry(self, new_value, action, max_length):
+        """Valida cada tecla presionada en el campo NIT"""
+        max_len = int(max_length)
+
+        # Permitir teclas de control
+        if action == '0':  # Borrado
+            return True
+
+        # Validar solo dígitos
+        if not new_value.isdigit():
+            return False
+
+        # Validar longitud máxima
+        return len(new_value) <= max_len
+    def create_labeled_entry(self, parent, label, field, row, max_length, validation=None, name=None):
         # Configuración común para campos de entrada
         ttk.Label(parent, text=label).grid(row=row, column=0, pady=5, sticky="w")
-        
-        validate_cmd = (self.register(self.validate_entry_length), '%P', '%d', str(max_length))
+        if name:
+            validate_cmd = (self.register(self.validate_entry_length), '%P', '%d', str(max_length))
+        else:
+            validate_cmd = (self.register(self.validate_nit_entry), '%P', '%d', str(max_length))
         entry = ttk.Entry(parent, validate="key", validatecommand=validate_cmd)
         entry.grid(row=row, column=1, pady=5, sticky="ew")
         
@@ -647,20 +719,31 @@ class ClientInfoWindow(tk.Toplevel):
     
     def validate_nit(self):
         nit = self.nit_entry.get().strip()
-        # Permitir formato con guiones y puntos pero validar estructura
-        clean_nit = nit.replace('.', '').replace('-', '')
-        
-        # Validación básica de NIT colombiano
-        is_valid = re.match(r'^\d{9,15}(?:\d{1})?$', clean_nit) is not None
-        
-        if not is_valid:
-            self.validation_errors["nit"].set("Formato de NIT/CC inválido")
-            self.nit_entry.config(foreground="red")
+
+        if not nit:
+            self.show_error("nit", "Este campo es obligatorio")
             return False
-        
-        self.validation_errors["nit"].set("")
-        self.nit_entry.config(foreground="black")
+
+        # Validar longitud
+        if len(nit) < 5 or len(nit) > 15:
+            self.show_error("nit", "Debe tener entre 5 y 15 dígitos")
+            return False
+
+        # Validar solo números
+        if not nit.isdigit():
+            self.show_error("nit", "Solo se permiten números")
+            return False
+
+        self.clear_error("nit")
         return True
+
+    def show_error(self, field, message):
+        self.validation_errors[field].set(message)
+        getattr(self, f"{field}_entry").config(foreground="red")
+
+    def clear_error(self, field):
+        self.validation_errors[field].set("")
+        getattr(self, f"{field}_entry").config(foreground="black")
     
     def validate_payment(self):
         if not self.pago_combobox.get():
@@ -693,11 +776,15 @@ class ClientInfoWindow(tk.Toplevel):
         if not self.validate_form():
             messagebox.showerror("Error", "Por favor corrija los campos marcados en rojo")
             return
-        
-        # Formatear NIT (quitar puntos, mantener guion verificador si existe)
+
+        # Asegurar formato numérico
         raw_nit = self.nit_entry.get().strip()
-        clean_nit = re.sub(r'[^\d-]', '', raw_nit)  # Mantener solo dígitos y guiones
-        
+        clean_nit = ''.join(filter(str.isdigit, raw_nit))  # Filtro adicional de seguridad
+
+        if len(clean_nit) < 5 or len(clean_nit) > 15:
+            messagebox.showerror("Error", "NIT/CC inválido")
+            return
+
         self.venta.cliente_info = {
             "nombre": self.nombre_entry.get().strip(),
             "nit": clean_nit
@@ -892,17 +979,24 @@ class SalesApp(tk.Tk):
         self.quantity_entry.delete(0, tk.END)
 
     def checkout(self) -> None:
-        """Finaliza la venta."""
-        if not messagebox.askyesno("Finalizar venta", "¿Está seguro de que desea finalizar esta venta?"):
-                return
         if not self.venta.items:
-            messagebox.showerror(
-                "Error",
-                "No hay productos en la venta"
-            )
+            messagebox.showerror("Error", "No hay productos en la venta")
             return
 
-        # Crear ventana personalizada para mostrar la factura
+        # Abrir ventana de datos del cliente (modal)
+        client_window = ClientInfoWindow(self, self.venta)
+        self.wait_window(client_window)
+
+        # Verificar si se completó el formulario
+        if not self.venta.cliente_info['nombre']: 
+            return  # El usuario canceló
+
+        # Validación final antes de generar factura
+        if not self.venta.cliente_info['nit']:
+            messagebox.showerror("Error", "Debe ingresar un NIT/CC válido")
+            return
+
+        # Generar factura
         InvoiceWindow(self, self.venta.generar_factura())
         self.reset_sale(finish=True)
 
