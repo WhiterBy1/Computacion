@@ -1,3 +1,4 @@
+import re
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 from dataclasses import dataclass
@@ -11,6 +12,7 @@ class Product:
     name: str
     price: float
     unit: Literal['unidad','libra','kilo']
+    stock: float
 
 class ProductManager:
     """Clase que define los productos y abarca la lógica de creación y búsqueda de productos."""
@@ -21,18 +23,18 @@ class ProductManager:
     def create_products_test(self) -> List[Product]:
         """Crea una lista de productos con precios en COP."""
         return [
-            Product("COD1", "Agua 600ml", 2500, "unidad"),
-            Product("COD2", "Arroz Diana 1kg", 4000, "kilo"),
-            Product("COD3", "Carne Molida 1 libra", 18000, "libra"),
-            Product("COD4", "Café Juan Valdez 500g", 20000, "kilo"),
-            Product("COD5", "Coca-Cola 1L", 4500, "unidad"),
-            Product("COD6", "Galletas Saltín Noel", 2500, "unidad"),
-            Product("COD7", "Huevos x 30 unidades", 15000, "unidad"),
-            Product("COD8", "Leche Alquería 1L", 3500, "unidad"),
-            Product("COD9", "Papas Margarita 150g", 3500, "unidad"),
-            Product("COD10", "Pan Bimbo Integral", 6000, "unidad"),
-            Product("COD11", "Pechuga de Pollo 1 libra", 10000, "libra"),
-            Product("COD12", "Queso Campesino 1 libra", 12000, "libra"),
+            Product("COD1", "Agua 600ml", 2500, "unidad", 100),
+            Product("COD2", "Arroz Diana 1kg", 4000, "kilo", 50),
+            Product("COD3", "Carne Molida 1 libra", 18000, "libra", 30),
+            Product("COD4", "Café Juan Valdez 500g", 20000, "kilo", 40),
+            Product("COD5", "Coca-Cola 1L", 4500, "unidad", 80),
+            Product("COD6", "Galletas Saltín Noel", 2500, "unidad", 60),
+            Product("COD7", "Huevos x 30 unidades", 15000, "unidad", 25),
+            Product("COD8", "Leche Alquería 1L", 3500, "unidad", 70),
+            Product("COD9", "Papas Margarita 150g", 3500, "unidad", 45),
+            Product("COD10", "Pan Bimbo Integral", 6000, "unidad", 35),
+            Product("COD11", "Pechuga de Pollo 1 libra", 10000, "libra", 20),
+            Product("COD12", "Queso Campesino 1 libra", 12000, "libra", 15),
         ]
 
     def find_product(self, search_term: str) -> Optional[Product]:
@@ -267,9 +269,9 @@ class InvoiceWindow(tk.Toplevel):
         
         # Configurar ventana
         self.title("Venta Finalizada")
-        self.geometry("1050x600")
-        self.minsize(1050, 600)
-        self.maxsize(1050, 600)
+        self.geometry("1100x600")
+        self.minsize(1100, 600)
+        self.maxsize(1100, 600)
         
         # Hacer la ventana modal
         self.transient(parent)
@@ -448,22 +450,19 @@ class ProductManagementWindow(tk.Toplevel):
         if not selected_item:
             messagebox.showerror("Error", "Por favor seleccione un producto")
             return
-            
+
         item_values = self.tree.item(selected_item)["values"]
         code = item_values[0]
         new_quantity = self.quantity_entry.get()
-        
-        # Encontrar el producto en la venta
+
         product = next((item for item in self.venta.items if item["code"] == code), None)
         if not product:
             return
-            
-        # Encontrar el producto original en el product_manager
+
         original_product = self.parent.product_manager.find_product(code)
         if not original_product:
             return
-            
-        # Validar la nueva cantidad
+
         cantidad_validada = Validador.validar_cantidad(new_quantity, product["unit"])
         if cantidad_validada is None:
             if product["unit"] == "unidad":
@@ -472,6 +471,23 @@ class ProductManagementWindow(tk.Toplevel):
                 mensaje = f"La cantidad debe ser un número positivo para productos vendidos por {product['unit']}"
             messagebox.showerror("Error", mensaje)
             return
+
+        # Calcular diferencia de cantidad
+        delta = cantidad_validada - product['quantity']
+
+        # Validar stock si se aumenta la cantidad
+        if delta > 0:
+            if original_product.stock < delta:
+                messagebox.showerror(
+                    "Error",
+                    f"Stock insuficiente. Ademas de las ingrsadas hay disponibles: f{original_product.stock:.2f}"
+                )
+                return
+            original_product.stock -= delta
+        elif delta < 0:
+            original_product.stock += abs(delta)
+
+
             
         # Restar valores anteriores
         self.venta.subtotal -= product['subtotal']
@@ -510,21 +526,25 @@ class ProductManagementWindow(tk.Toplevel):
         if not selected_item:
             messagebox.showerror("Error", "Por favor seleccione un producto")
             return
-            
+
         if messagebox.askyesno("Confirmar", "¿Está seguro de que desea eliminar este producto?"):
             item_values = self.tree.item(selected_item)["values"]
             code = item_values[0]
-            
-            # Encontrar el producto a eliminar
+
             producto_a_eliminar = next((item for item in self.venta.items if item["code"] == code), None)
             if producto_a_eliminar:
+                # Restaurar stock
+                original_product = self.parent.product_manager.find_product(code)
+                if original_product:
+                    original_product.stock += producto_a_eliminar['quantity']
+
                 # Restar valores de los totales
                 self.venta.subtotal -= producto_a_eliminar['subtotal']
                 self.venta.total_iva -= producto_a_eliminar['iva']
-                
+
                 # Eliminar producto
                 self.venta.items = [item for item in self.venta.items if item["code"] != code]
-            
+
             # Actualizar UI
             self.load_products()
             self.parent.update_invoice_display()
@@ -536,6 +556,156 @@ class ProductManagementWindow(tk.Toplevel):
     
     def center_window(self):
         """Centra la ventana en la pantalla."""
+        self.update_idletasks()
+        width = self.winfo_width()
+        height = self.winfo_height()
+        x = (self.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.winfo_screenheight() // 2) - (height // 2)
+        self.geometry(f'{width}x{height}+{x}+{y}')
+class ClientInfoWindow(tk.Toplevel):
+    def __init__(self, parent, venta):
+        super().__init__(parent)
+        self.venta = venta
+        self.title("Datos del Cliente")
+        self.geometry("500x400")
+        self.resizable(False, False)
+        
+        self.validation_errors = {
+            "nombre": tk.StringVar(),
+            "nit": tk.StringVar(),
+            "pago": tk.StringVar()
+        }
+        
+        self.create_widgets()
+        self.center_window()
+    
+    def create_widgets(self):
+        main_frame = ttk.Frame(self, padding=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Título
+        ttk.Label(main_frame, 
+                text="Información Requerida para Facturación", 
+                font=('Arial', 12, 'bold')).grid(row=0, column=0, columnspan=2, pady=10)
+        
+        # Campos del formulario
+        self.create_labeled_entry(main_frame, "Nombre completo*:", "nombre", 1, 80)
+        self.create_labeled_entry(main_frame, "NIT/CC*:", "nit", 2, 15, self.validate_nit)
+        self.create_payment_combobox(main_frame)
+        
+        # Nota legal
+        legal_text = ("* Campos obligatorios\n"
+                     "El NIT debe tener entre 9 y 15 dígitos\n"
+                     "Formato aceptado: 123456789-1 o 901.234.567-8")
+        ttk.Label(main_frame, text=legal_text, foreground="gray").grid(
+            row=5, column=0, columnspan=2, pady=10, sticky="w")
+        
+        # Botones
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.grid(row=6, column=0, columnspan=2, pady=20)
+        
+        ttk.Button(btn_frame, text="Aceptar", command=self.guardar_datos).pack(side=tk.LEFT, padx=10)
+        ttk.Button(btn_frame, text="Cancelar", command=self.destroy).pack(side=tk.LEFT, padx=10)
+    
+    def create_labeled_entry(self, parent, label, field, row, max_length, validation=None):
+        # Configuración común para campos de entrada
+        ttk.Label(parent, text=label).grid(row=row, column=0, pady=5, sticky="w")
+        
+        validate_cmd = (self.register(self.validate_entry_length), '%P', '%d', str(max_length))
+        entry = ttk.Entry(parent, validate="key", validatecommand=validate_cmd)
+        entry.grid(row=row, column=1, pady=5, sticky="ew")
+        
+        if validation:
+            entry.bind("<FocusOut>", lambda e, f=field: validation())
+        
+        # Etiqueta para errores
+        error_label = ttk.Label(parent, textvariable=self.validation_errors[field], 
+                              foreground="red", wraplength=300)
+        error_label.grid(row=row+1, column=1, sticky="w")
+        
+        setattr(self, f"{field}_entry", entry)
+    
+    def create_payment_combobox(self, parent):
+        ttk.Label(parent, text="Forma de pago*:").grid(row=4, column=0, pady=5, sticky="w")
+        
+        self.pago_combobox = ttk.Combobox(parent, 
+                                       values=["Contado", "Crédito 30 días", "Tarjeta crédito"], 
+                                       state="readonly")
+        self.pago_combobox.set("Contado")
+        self.pago_combobox.grid(row=4, column=1, pady=5, sticky="ew")
+        self.pago_combobox.bind("<<ComboboxSelected>>", lambda e: self.validate_payment())
+        
+        error_label = ttk.Label(parent, textvariable=self.validation_errors["pago"], 
+                              foreground="red", wraplength=300)
+        error_label.grid(row=5, column=1, sticky="w")
+    
+    def validate_entry_length(self, new_text, action, max_length):
+        max_len = int(max_length)
+        if action == '1':  # Inserción
+            return len(new_text) <= max_len
+        return True
+    
+    def validate_nit(self):
+        nit = self.nit_entry.get().strip()
+        # Permitir formato con guiones y puntos pero validar estructura
+        clean_nit = nit.replace('.', '').replace('-', '')
+        
+        # Validación básica de NIT colombiano
+        is_valid = re.match(r'^\d{9,15}(?:\d{1})?$', clean_nit) is not None
+        
+        if not is_valid:
+            self.validation_errors["nit"].set("Formato de NIT/CC inválido")
+            self.nit_entry.config(foreground="red")
+            return False
+        
+        self.validation_errors["nit"].set("")
+        self.nit_entry.config(foreground="black")
+        return True
+    
+    def validate_payment(self):
+        if not self.pago_combobox.get():
+            self.validation_errors["pago"].set("Debe seleccionar una forma de pago")
+            return False
+        self.validation_errors["pago"].set("")
+        return True
+    
+    def validate_form(self):
+        valid = True
+        # Validar nombre
+        nombre = self.nombre_entry.get().strip()
+        if not nombre:
+            self.validation_errors["nombre"].set("Debe ingresar el nombre del cliente")
+            valid = False
+        else:
+            self.validation_errors["nombre"].set("")
+        
+        # Validar NIT
+        if not self.validate_nit():
+            valid = False
+        
+        # Validar forma de pago
+        if not self.validate_payment():
+            valid = False
+        
+        return valid
+    
+    def guardar_datos(self):
+        if not self.validate_form():
+            messagebox.showerror("Error", "Por favor corrija los campos marcados en rojo")
+            return
+        
+        # Formatear NIT (quitar puntos, mantener guion verificador si existe)
+        raw_nit = self.nit_entry.get().strip()
+        clean_nit = re.sub(r'[^\d-]', '', raw_nit)  # Mantener solo dígitos y guiones
+        
+        self.venta.cliente_info = {
+            "nombre": self.nombre_entry.get().strip(),
+            "nit": clean_nit
+        }
+        self.venta.forma_pago = self.pago_combobox.get()
+        self.destroy()
+    
+    def center_window(self):
         self.update_idletasks()
         width = self.winfo_width()
         height = self.winfo_height()
@@ -561,8 +731,8 @@ class SalesApp(tk.Tk):
     def setup_window(self) -> None:
         """Configura la ventana principal."""
         self.title("Sistema de Ventas - Tienda Colombiana")
-        self.geometry("1050x600")
-        self.minsize(1050, 600)
+        self.geometry("1100x600")
+        self.minsize(1100, 600)
 
         # Configura el peso de las columnas y filas
         self.grid_columnconfigure(0, weight=1)
@@ -677,7 +847,6 @@ class SalesApp(tk.Tk):
             )
             return
 
-        # Obtener el producto primero para conocer su unidad
         producto_codigo = producto_seleccionado.split(' - ')[0]
         producto = self.product_manager.find_product(producto_codigo)
         if not producto:
@@ -687,17 +856,25 @@ class SalesApp(tk.Tk):
             )
             return
 
-        # Validar la cantidad según la unidad del producto
         cantidad_validada = Validador.validar_cantidad(cantidad, producto.unit)
         if cantidad_validada is None:
             if producto.unit == 'unidad':
                 mensaje = "La cantidad debe ser un número entero positivo para productos vendidos por unidad"
             else:
                 mensaje = f"La cantidad debe ser un número positivo para productos vendidos por {producto.unit}"
-            
             messagebox.showerror("Error", mensaje)
             return
 
+        # Validar stock disponible
+        if cantidad_validada > producto.stock:
+            messagebox.showerror(
+                "Error",
+                f"Stock insuficiente. Disponible: {producto.stock:.2f} {producto.unit}"
+            )
+            return
+
+        # Actualizar stock y agregar producto
+        producto.stock -= cantidad_validada
         self.venta.agregar_producto(producto, cantidad_validada)
         self.update_invoice_display()
         self.clear_inputs()
@@ -716,6 +893,8 @@ class SalesApp(tk.Tk):
 
     def checkout(self) -> None:
         """Finaliza la venta."""
+        if not messagebox.askyesno("Finalizar venta", "¿Está seguro de que desea finalizar esta venta?"):
+                return
         if not self.venta.items:
             messagebox.showerror(
                 "Error",
@@ -730,8 +909,13 @@ class SalesApp(tk.Tk):
     def reset_sale(self, finish: bool = False) -> None:
         """Reinicia el sistema para una nueva venta."""
         if not finish:
-            if not messagebox.askokcancel("Nueva venta", "Estas seguro que deseas borrar esta venta e iniciar otra?"):
+            if not messagebox.askyesno("Nueva venta", "¿Está seguro de que desea borrar esta venta e iniciar otra?"):
                 return
+            # Restaurar stock de todos los productos
+            for item in self.venta.items:
+                product = self.product_manager.find_product(item['code'])
+                if product:
+                    product.stock += item['quantity']
         self.venta = Venta()
         self.clear_inputs()
         self.update_invoice_display()
