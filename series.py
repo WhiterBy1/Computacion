@@ -4,7 +4,63 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
-import re
+
+class SerieAritmetica:
+    def __init__(self, start, end, a1, d):
+        self.start = start
+        self.end = end
+        self.a1 = a1
+        self.d = d
+
+    def calcular_suma(self):
+        if self.start > self.end:
+            raise ValueError("El índice inicial debe ser menor o igual al final")
+        suma = 0.0
+        terms = []
+        for k in range(self.start, self.end + 1):
+            term = self.a1 + (k - self.start) * self.d
+            terms.append(term)
+            suma += term
+        return suma, terms
+
+class SerieGeometrica:
+    def __init__(self, start, end, a1, r):
+        self.start = start
+        self.end = end
+        self.a1 = a1
+        self.r = r
+
+    def calcular_suma(self):
+        if self.start > self.end:
+            raise ValueError("El índice inicial debe ser menor o igual al final")
+        suma = 0.0
+        terms = []
+        for k in range(self.start, self.end + 1):
+            term = self.a1 * (self.r ** (k - self.start))
+            terms.append(term)
+            suma += term
+        return suma, terms
+
+class SerieArmonica:
+    def __init__(self, start, end, tipo):
+        self.start = start
+        self.end = end
+        self.tipo = tipo  # 'Regular' o 'Alternante'
+
+    def calcular_suma(self):
+        if self.start > self.end:
+            raise ValueError("El índice inicial debe ser menor o igual al final")
+        suma = 0.0
+        terms = []
+        for k in range(self.start, self.end + 1):
+            if self.tipo == 'Regular':
+                term = 1.0 / k
+            else:
+                exponent = (k - self.start) + 1
+                term = ((-1) ** exponent) / k
+            terms.append(term)
+            suma += term
+        return suma, terms
 
 class SeriesCalculator(tk.Tk):
     def __init__(self):
@@ -59,13 +115,26 @@ class SeriesCalculator(tk.Tk):
         self.params_frame = tk.Frame(left_frame, bg="#f0f0f0")
         self.params_frame.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="w")
         
-        # Número de términos
-        terms_label = tk.Label(left_frame, text="Número de términos:", bg="#f0f0f0")
-        terms_label.grid(row=2, column=0, padx=5, pady=5, sticky="w")
+        # Frame para índices de la sumatoria
+        index_frame = tk.Frame(left_frame, bg="#f0f0f0")
+        index_frame.grid(row=2, column=0, columnspan=2, 
+                         padx=5, pady=5, sticky="w")
         
-        self.terms_var = tk.StringVar(value="10")
-        terms_entry = ttk.Entry(left_frame, textvariable=self.terms_var, width=10)
-        terms_entry.grid(row=2, column=1, padx=5, pady=5, sticky="w")
+        # Índice inicial de la sumatoria
+        start_label = tk.Label(index_frame, text="Índice inicial (start):", bg="#f0f0f0")
+        start_label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        
+        self.start_var = tk.StringVar(value="1")
+        start_entry = ttk.Entry(index_frame, textvariable=self.start_var, width=10)
+        start_entry.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+        
+        # Índice final de la sumatoria
+        end_label = tk.Label(index_frame, text="Índice final (end):", bg="#f0f0f0")
+        end_label.grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        
+        self.end_var = tk.StringVar(value="10")
+        end_entry = ttk.Entry(index_frame, textvariable=self.end_var, width=10)
+        end_entry.grid(row=1, column=1, padx=5, pady=5, sticky="w")
         
         # Botón de cálculo
         calculate_button = ttk.Button(left_frame, text="Calcular", command=self.calculate_series)
@@ -161,25 +230,25 @@ class SeriesCalculator(tk.Tk):
         
         if series_type == "Serie Aritmética":
             # Notación de sumatoria genérica para serie aritmética
-            summation_latex = r"$\sum_{start}^{end} [a_1 + (k-1) \cdot d]$"
+            summation_latex = r"$\sum_{k=start}^{end} [a_1 + (k-start) \cdot d]$"
             
         elif series_type == "Serie Geométrica":
             # Notación de sumatoria genérica para serie geométrica
-            summation_latex = r"$\sum_{start}^{end} a_1 \cdot r^{k-1}$"
+            summation_latex = r"$\sum_{k=start}^{end} a_1 \cdot r^{k-start}$"
             
         elif series_type == "Serie Armónica":
             harmonic_type = self.harmonic_type.get()
             
             if harmonic_type == "Regular":
                 # Notación de sumatoria genérica para serie armónica regular
-                summation_latex = r"$\sum_{k = start}^{end} \frac{a}{k}$"
+                summation_latex = r"$\sum_{k=start}^{end} \frac{1}{k}$"
             else:
                 # Notación de sumatoria genérica para serie armónica alternante
-                summation_latex = r"$\sum_{start}^{end} \frac{(-1)^{k+1}}{k}$"
+                summation_latex = r"$\sum_{k=start}^{end} \frac{(-1)^{k-start+1}}{k}$"
         
         # Mostrar la notación de sumatoria genérica en el frame verde
         fig = Figure(figsize=(8, 4), dpi=100)
-        ax = fig.add_subplot(110,23, 280)
+        ax = fig.add_subplot(111)
         ax.text(0.5, 0.5, summation_latex, fontsize=20, ha='center', va='center')
         ax.axis('off')
         
@@ -187,7 +256,7 @@ class SeriesCalculator(tk.Tk):
         canvas.draw()
         canvas.get_tk_widget().pack(fill=tk.Y, expand=True, padx=10, pady=10)
     
-    def update_summation_display(self, series_type, n, formula_details):
+    def update_summation_display(self, series_type, start, end, formula_details):
         # Limpiar el frame de sumatoria
         for widget in self.summation_frame.winfo_children():
             widget.destroy()
@@ -197,22 +266,22 @@ class SeriesCalculator(tk.Tk):
         if series_type == "Serie Aritmética":
             a1, d = formula_details
             # Notación de sumatoria para serie aritmética
-            summation_latex = r"$\sum_{k=1}^{" + str(n) + r"} [" + str(a1) + r" + (k-1) \cdot " + str(d) + r"]$"
+            summation_latex = r"$\sum_{k=" + str(start) + r"}^{" + str(end) + r"} [" + str(a1) + r" + (k-" + str(start) + r") \cdot " + str(d) + r"]$"
             
         elif series_type == "Serie Geométrica":
             a1, r = formula_details
             # Notación de sumatoria para serie geométrica
-            summation_latex = r"$\sum_{k=1}^{" + str(n) + r"} " + str(a1) + r" \cdot " + str(r) + r"^{k-1}$"
+            summation_latex = r"$\sum_{k=" + str(start) + r"}^{" + str(end) + r"} " + str(a1) + r" \cdot " + str(r) + r"^{k-" + str(start) + r"}$"
             
         elif series_type == "Serie Armónica":
             harmonic_type = formula_details
             
             if harmonic_type == "Regular":
                 # Notación de sumatoria para serie armónica regular
-                summation_latex = r"$\sum_{k=1}^{" + str(n) + r"} \frac{1}{k}$"
+                summation_latex = r"$\sum_{k=" + str(start) + r"}^{" + str(end) + r"} \frac{1}{k}$"
             else:
                 # Notación de sumatoria para serie armónica alternante
-                summation_latex = r"$\sum_{k=1}^{" + str(n) + r"} \frac{(-1)^{k+1}}{k}$"
+                summation_latex = r"$\sum_{k=" + str(start) + r"}^{" + str(end) + r"} \frac{(-1)^{k-" + str(start) + r"+1}}{k}$"
         
         # Mostrar la notación de sumatoria en el frame verde
         fig = Figure(figsize=(8, 4), dpi=100)
@@ -224,7 +293,7 @@ class SeriesCalculator(tk.Tk):
         canvas.draw()
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
             
-    def plot_series(self, terms, partial_sums):
+    def plot_series(self, terms, partial_sums, start_idx):
         # Limpiar frame de gráfica
         for widget in self.plot_frame.winfo_children():
             widget.destroy()
@@ -235,11 +304,11 @@ class SeriesCalculator(tk.Tk):
         
         # Gráfica de términos
         ax1 = fig.add_subplot(121)
-        x = list(range(1, len(terms) + 1))
+        x = list(range(start_idx, start_idx + len(terms)))
         ax1.plot(x, terms, 'bo-', markersize=4)
         ax1.set_title('Términos de la Serie')
-        ax1.set_xlabel('n')
-        ax1.set_ylabel('a_n')
+        ax1.set_xlabel('k')
+        ax1.set_ylabel('a_k')
         ax1.grid(True)
         
         # Gráfica de sumas parciales
@@ -257,9 +326,11 @@ class SeriesCalculator(tk.Tk):
 
     def calculate_series(self):
         try:
-            n = int(self.terms_var.get())
-            if n <= 0:
-                messagebox.showerror("Error", "El número de términos debe ser positivo")
+            start = int(self.start_var.get())
+            end = int(self.end_var.get())
+            
+            if start > end:
+                messagebox.showerror("Error", "El índice inicial debe ser menor o igual al final")
                 return
                 
             series_type = self.series_var.get()
@@ -273,71 +344,69 @@ class SeriesCalculator(tk.Tk):
                 d = float(self.d_var.get())
                 
                 # Actualizar la visualización de la sumatoria
-                self.update_summation_display(series_type, n, (a1, d))
+                self.update_summation_display(series_type, start, end, (a1, d))
                 
-                for i in range(1, n+1):
-                    term = a1 + (i-1) * d
-                    terms.append(term)
-                    partial_sums.append(sum(terms))
+                try:
+                    serie = SerieAritmetica(start, end, a1, d)
+                    sum_total, terms = serie.calcular_suma()
+                except ValueError as e:
+                    messagebox.showerror("Error", str(e))
+                    return
                 
+                partial_sums = [sum(terms[:i+1]) for i in range(len(terms))]
+                n = end - start + 1
                 formula_latex = (
                     r"S_n = \frac{n}{2} \cdot [2a_1 + (n-1)d] = "
-                    r"\frac{" + str(n) + r"}{2} \cdot [2\cdot" + str(a1) + r" + (" + str(n) + r"-1)\cdot" + str(d) + r"] = " + str(partial_sums[-1])
+                    r"\frac{" + str(n) + r"}{2} \cdot [2\cdot" + str(a1) + r" + (" + str(n-1) + r")\cdot" + str(d) + r"] = " + f"{sum_total:.4f}"
                 )
-                result_text = f"Serie Aritmética\na1 = {a1}, d = {d}\nSuma total: {partial_sums[-1]:.4f}"
+                result_text = f"Serie Aritmética\nPrimer término = {a1}, d = {d}\nRango: k = {start} a {end}\nSuma total: {sum_total:.4f}"
             
             elif series_type == "Serie Geométrica":
                 a1 = float(self.a1_var.get())
                 r = float(self.r_var.get())
                 
                 # Actualizar la visualización de la sumatoria
-                self.update_summation_display(series_type, n, (a1, r))
+                self.update_summation_display(series_type, start, end, (a1, r))
                 
-                for i in range(1, n+1):
-                    term = a1 * (r ** (i-1))
-                    terms.append(term)
-                    partial_sums.append(sum(terms))
+                try:
+                    serie = SerieGeometrica(start, end, a1, r)
+                    sum_total, terms = serie.calcular_suma()
+                except ValueError as e:
+                    messagebox.showerror("Error", str(e))
+                    return
                 
+                partial_sums = [sum(terms[:i+1]) for i in range(len(terms))]
+                n = end - start + 1
                 formula_latex = (
                     r"S_n = \frac{a_1(1 - r^n)}{1 - r} = "
-                    r"\frac{" + str(a1) + r"(1 - " + str(r) + r"^{" + str(n) + r"})}{1 - " + str(r) + r"} = " + str(partial_sums[-1])
+                    r"\frac{" + str(a1) + r"(1 - " + str(r) + r"^{" + str(n) + r"})}{1 - " + str(r) + r"} = " + f"{sum_total:.4f}"
                 )
-                result_text = f"Serie Geométrica\na1 = {a1}, r = {r}\nSuma total: {partial_sums[-1]:.4f}"
+                result_text = f"Serie Geométrica\nPrimer término = {a1}, r = {r}\nRango: k = {start} a {end}\nSuma total: {sum_total:.4f}"
                 
                 if abs(r) < 1:
                     infinite_sum = a1 / (1 - r)
                     formula_latex += r"\quad S_{\infty} = " + f"{infinite_sum:.4f}"
-                else:
-                    formula_latex += r"\quad"
             
             elif series_type == "Serie Armónica":
                 harmonic_type = self.harmonic_type.get()
                 
                 # Actualizar la visualización de la sumatoria
-                self.update_summation_display(series_type, n, harmonic_type)
+                self.update_summation_display(series_type, start, end, harmonic_type)
                 
-                if harmonic_type == "Regular":
-                    for i in range(1, n+1):
-                        term = 1 / i
-                        terms.append(term)
-                        partial_sums.append(sum(terms))
-                    
-                    formula_latex = (
-                        r"S_n = \sum_{k=1}^n \frac{1}{k} = "
-                        r"\sum_{k=1}^{" + str(n) + r"} \frac{1}{k} = " + f"{partial_sums[-1]:.4f}"
-                    )
-                    result_text = f"Serie Armónica Regular\nSuma total: {partial_sums[-1]:.4f}"
-                else:
-                    for i in range(1, n+1):
-                        term = (-1)**(i+1) / i
-                        terms.append(term)
-                        partial_sums.append(sum(terms))
-                    
-                    formula_latex = (
-                        r"S_n = \sum_{k=1}^n \frac{(-1)^{k+1}}{k} = "
-                        r"\sum_{k=1}^{" + str(n) + r"} \frac{(-1)^{k+1}}{k} = " + f"{partial_sums[-1]:.4f}"
-                    )
-                    result_text = f"Serie Armónica Alternante\nSuma total: {partial_sums[-1]:.4f}"
+                try:
+                    serie = SerieArmonica(start, end, harmonic_type)
+                    sum_total, terms = serie.calcular_suma()
+                except ValueError as e:
+                    messagebox.showerror("Error", str(e))
+                    return
+                
+                partial_sums = [sum(terms[:i+1]) for i in range(len(terms))]
+                formula_latex = (
+                    r"\sum_{k=" + str(start) + r"}^{" + str(end) + r"} \frac{" 
+                    + ("(-1)^{k-" + str(start) + r"+1}" if harmonic_type == "Alternante" else "1") 
+                    + r"}{k} = " + f"{sum_total:.4f}"
+                )
+                result_text = f"Serie Armónica {harmonic_type}\nRango: k = {start} a {end}\nSuma total: {sum_total:.4f}"
             
             # Limpiar frames anteriores
             for widget in self.text_frame.winfo_children():
@@ -362,7 +431,7 @@ class SeriesCalculator(tk.Tk):
             canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
             
             # Generar gráfica
-            self.plot_series(terms, partial_sums)
+            self.plot_series(terms, partial_sums, start)
             
         except ValueError as e:
             messagebox.showerror("Error", "Por favor, ingrese valores numéricos válidos")
