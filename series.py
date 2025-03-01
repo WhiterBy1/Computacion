@@ -2,7 +2,6 @@ import tkinter as tk
 from tkinter import ttk, messagebox, StringVar
 import numpy as np
 import re
-import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 from abc import ABC, abstractmethod
@@ -180,32 +179,7 @@ class MatplotlibFigure:
         ax.text(0.5, 0.5, text, fontsize=fontsize, ha='center', va='center')
         ax.axis('off')
         return fig
-    
-    @staticmethod
-    def create_series_plots(terms, partial_sums, start_idx):
-        fig = Figure(figsize=(8, 5), dpi=100)
-        fig.subplots_adjust(bottom=0.15)
-        
-        # Gráfica de términos
-        ax1 = fig.add_subplot(121)
-        x = list(range(start_idx, start_idx + len(terms)))
-        ax1.plot(x, terms, 'bo-', markersize=4)
-        ax1.set_title('Términos de la Serie')
-        ax1.set_xlabel('k')
-        ax1.set_ylabel('a_k')
-        ax1.grid(True)
-        
-        # Gráfica de sumas parciales
-        ax2 = fig.add_subplot(122)
-        ax2.plot(x, partial_sums, 'ro-', markersize=4)
-        ax2.set_title('Sumas Parciales')
-        ax2.set_xlabel('n')
-        ax2.set_ylabel('S_n')
-        ax2.grid(True)
-        
-        return fig
 
-# Add this class to validate and limit input length
 class ValidatedEntry(ttk.Entry):
     """Entry widget with validation for numeric input and max length"""
     def __init__(self, parent, textvariable, max_length=10, allow_float=True, **kwargs):
@@ -269,6 +243,7 @@ class ValidatedEntry(ttk.Entry):
         if self.tooltip:
             self.tooltip.destroy()
             self.tooltip = None
+
 class SeriesCalculator(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -291,12 +266,6 @@ class SeriesCalculator(tk.Tk):
         style.configure("TButton", font=("Arial", 12))
         style.configure("TEntry", font=("Arial", 12))
         style.configure("TCombobox", font=("Arial", 12))
-        
-        # Configurar matplotlib para usar fuentes básicas sin LaTeX
-        plt.rcParams.update({
-            "text.usetex": False,
-            "font.family": "serif"
-        })
     
     def _init_ui(self):
         # Frame principal
@@ -354,7 +323,6 @@ class SeriesCalculator(tk.Tk):
         self.summation_frame = tk.Frame(parent, bg="#e0ffe0", borderwidth=2, relief="groove")
         self.summation_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10)
     
-    # Modified _create_index_frame method to use ValidatedEntry
     def _create_index_frame(self, parent):
         index_frame = tk.Frame(parent, bg="#f0f0f0")
         index_frame.grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky="w")
@@ -376,7 +344,6 @@ class SeriesCalculator(tk.Tk):
         end_entry = ValidatedEntry(index_frame, textvariable=self.end_var, 
                                   allow_float=False, max_length=6, width=10)
         end_entry.grid(row=1, column=1, padx=5, pady=5, sticky="w")
-
     
     def _init_result_frames(self, parent):
         # Frame para resultados
@@ -390,10 +357,6 @@ class SeriesCalculator(tk.Tk):
         # Frame para fórmulas
         self.formula_frame = tk.Frame(self.result_frame, bg="#f0f0f0")
         self.formula_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Frame para gráfica
-        self.plot_frame = tk.Frame(self.result_frame, bg="#f0f0f0")
-        self.plot_frame.pack(fill=tk.BOTH, expand=True, pady=10)
     
     def update_input_fields(self, event=None):
         # Limpiar frame de parámetros
@@ -587,22 +550,9 @@ class SeriesCalculator(tk.Tk):
                     f"No se pudo calcular la serie: {str(e)}")
                 return
 
-            # Calculate partial sums (handle potential overflow)
-            try:
-                partial_sums = []
-                running_sum = 0
-                for term in terms:
-                    running_sum += term
-                    partial_sums.append(running_sum)
-            except Exception as e:
-                messagebox.showerror("Error", f"Error al calcular sumas parciales: {str(e)}")
-                return
-
             # Update the display
             try:
-                self._display_latex_in_frame(serie.get_summation_latex(), self.summation_frame)
-                self._update_results_display(serie, sum_total, terms, partial_sums)
-                messagebox.showinfo("Éxito", "Cálculo completado correctamente")
+                self._update_results_display(serie, sum_total)
             except Exception as e:
                 messagebox.showerror("Error de visualización", 
                     f"No se pudieron mostrar los resultados: {str(e)}")
@@ -612,7 +562,7 @@ class SeriesCalculator(tk.Tk):
                 f"Ha ocurrido un error inesperado: {str(e)}")
             print(f"Error inesperado: {e}")
     
-    def _update_results_display(self, serie, sum_total, terms, partial_sums):
+    def _update_results_display(self, serie, sum_total):
         # Limpiar frames anteriores
         for widget in self.text_frame.winfo_children():
             widget.destroy()
@@ -627,22 +577,6 @@ class SeriesCalculator(tk.Tk):
         # Mostrar fórmula renderizada
         formula_latex = serie.get_formula_latex(sum_total)
         self._display_latex_in_frame(f"${formula_latex}$", self.formula_frame, clear=True)
-        
-        # Generar gráfica
-        self._display_series_plot(terms, partial_sums, serie.start)
-    
-    def _display_series_plot(self, terms, partial_sums, start_idx):
-        # Limpiar frame de gráfica
-        for widget in self.plot_frame.winfo_children():
-            widget.destroy()
-        
-        # Crear la figura con los gráficos
-        fig = MatplotlibFigure.create_series_plots(terms, partial_sums, start_idx)
-        
-        # Mostrar gráfica en el frame
-        canvas = FigureCanvasTkAgg(fig, master=self.plot_frame)
-        canvas.draw()
-        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
 if __name__ == "__main__":
     app = SeriesCalculator()
