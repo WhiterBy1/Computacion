@@ -474,7 +474,7 @@ class SeriesCalculator(tk.Tk):
         elif series_type == "Serie Geométrica":
             serie_temp = SerieFactory.create_serie(series_type, 0, 0, a1=0, r=0)
         elif series_type == "Serie Armónica":
-            serie_temp = SerieFactory.create_serie(series_type, 0, 0, tipo=self.harmonic_type.get())
+            serie_temp = SerieFactory.create_serie(series_type, 1, 1, tipo=self.harmonic_type.get())
 
         # Obtener la notación LaTeX genérica
         summation_latex = serie_temp.get_generic_summation_latex()
