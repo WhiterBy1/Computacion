@@ -1,16 +1,12 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, StringVar
 import numpy as np
+import re
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 from abc import ABC, abstractmethod
 
-# Principio de Responsabilidad Única (S): Separar las series en clases con una responsabilidad específica
-# Principio de Abierto/Cerrado (O): Permitir agregar nuevos tipos de series sin modificar el código existente
-# Principio de Sustitución de Liskov (L): Las subclases de Serie pueden ser usadas donde se espera la clase base
-# Principio de Segregación de Interfaces (I): Interfaces específicas para cada componente
-# Principio de Inversión de Dependencias (D): Las clases de alto nivel no dependen de detalles de implementación
 
 class Serie(ABC):
     """Clase base abstracta para todas las series matemáticas"""
@@ -20,8 +16,15 @@ class Serie(ABC):
         self._validate_indices()
     
     def _validate_indices(self):
+        if not isinstance(self.start, int) or not isinstance(self.end, int):
+            raise ValueError("Los índices deben ser números enteros")
+
         if self.start > self.end:
             raise ValueError("El índice inicial debe ser menor o igual al final")
+
+        # For harmonic series, start must be positive
+        if isinstance(self, SerieArmonica) and self.start <= 0:
+            raise ValueError("El índice inicial para series armónicas debe ser mayor que 0")
     
     @abstractmethod
     def calcular_suma(self):
@@ -153,7 +156,6 @@ class SerieArmonica(Serie):
     def get_result_text(self, sum_total):
         return f"Serie Armónica {self.tipo}\nRango: k = {self.start} a {self.end}\nSuma total: {sum_total:.4f}"
 
-
 # Factory para crear las series - Patrón Factory Method
 class SerieFactory:
     @staticmethod
@@ -166,7 +168,6 @@ class SerieFactory:
             return SerieArmonica(start, end, kwargs.get('tipo'))
         else:
             raise ValueError(f"Tipo de serie no soportado: {serie_tipo}")
-
 
 # Componentes UI reutilizables
 class MatplotlibFigure:
@@ -204,7 +205,70 @@ class MatplotlibFigure:
         
         return fig
 
-
+# Add this class to validate and limit input length
+class ValidatedEntry(ttk.Entry):
+    """Entry widget with validation for numeric input and max length"""
+    def __init__(self, parent, textvariable, max_length=10, allow_float=True, **kwargs):
+        self.var = textvariable
+        self.max_length = max_length
+        self.allow_float = allow_float
+        
+        # Register validation command
+        vcmd = (parent.register(self.validate), '%P')
+        
+        super().__init__(parent, textvariable=textvariable, validate="key", 
+                         validatecommand=vcmd, **kwargs)
+        
+        # Add tooltip on hover
+        self.tooltip = None
+        self.bind("<Enter>", self.show_tooltip)
+        self.bind("<Leave>", self.hide_tooltip)
+    
+    def validate(self, new_value):
+        # Empty is valid (will be caught when calculating)
+        if new_value == "":
+            return True
+            
+        # Check max length
+        if len(new_value) > self.max_length:
+            return False
+            
+        # Check if it's a valid number format
+        if self.allow_float:
+            # Allow digits, one decimal point, and one minus sign at the start
+            pattern = r'^-?\d*\.?\d*$'
+        else:
+            # Allow digits and one minus sign at the start for integers
+            pattern = r'^-?\d*$'
+            
+        return bool(re.match(pattern, new_value))
+    
+    def show_tooltip(self, event):
+        if self.tooltip:
+            self.tooltip.destroy()
+        
+        x, y, _, _ = self.bbox("insert")
+        x += self.winfo_rootx() + 25
+        y += self.winfo_rooty() + 25
+        
+        # Create tooltip window
+        self.tooltip = tw = tk.Toplevel(self)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f"+{x}+{y}")
+        
+        # Determine message based on validation type
+        if self.allow_float:
+            msg = f"Ingrese un número (máx. {self.max_length} caracteres)"
+        else:
+            msg = f"Ingrese un número entero (máx. {self.max_length} caracteres)"
+            
+        label = tk.Label(tw, text=msg, background="#ffffe0", relief="solid", borderwidth=1)
+        label.pack()
+    
+    def hide_tooltip(self, event):
+        if self.tooltip:
+            self.tooltip.destroy()
+            self.tooltip = None
 class SeriesCalculator(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -238,19 +302,25 @@ class SeriesCalculator(tk.Tk):
         # Frame principal
         main_frame = tk.Frame(self, bg="#f0f0f0")
         main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        
+
         # Título
         title_label = tk.Label(main_frame, text="Calculadora de Series Matemáticas", 
                               font=("Arial", 16, "bold"), bg="#f0f0f0")
         title_label.pack(pady=10)
-        
+
         # Frame para los controles y visualización
         control_frame = tk.Frame(main_frame, bg="#f0f0f0")
         control_frame.pack(fill=tk.X, pady=10)
-        
+
         # Inicializar frames de la interfaz
         self._init_control_frame(control_frame)
         self._init_result_frames(main_frame)
+
+        # Status bar
+        self.status_var = tk.StringVar(value="Listo para calcular")
+        status_bar = tk.Label(self, textvariable=self.status_var, 
+                             bd=1, relief=tk.SUNKEN, anchor=tk.W)
+        status_bar.pack(side=tk.BOTTOM, fill=tk.X)
     
     def _init_control_frame(self, parent):
         # Frame izquierdo para los controles
@@ -284,25 +354,29 @@ class SeriesCalculator(tk.Tk):
         self.summation_frame = tk.Frame(parent, bg="#e0ffe0", borderwidth=2, relief="groove")
         self.summation_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10)
     
+    # Modified _create_index_frame method to use ValidatedEntry
     def _create_index_frame(self, parent):
         index_frame = tk.Frame(parent, bg="#f0f0f0")
         index_frame.grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky="w")
-        
+
         # Índice inicial de la sumatoria
         start_label = tk.Label(index_frame, text="Índice inicial (start):", bg="#f0f0f0")
         start_label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
-        
+
         self.start_var = tk.StringVar(value="1")
-        start_entry = ttk.Entry(index_frame, textvariable=self.start_var, width=10)
+        start_entry = ValidatedEntry(index_frame, textvariable=self.start_var, 
+                                    allow_float=False, max_length=6, width=10)
         start_entry.grid(row=0, column=1, padx=5, pady=5, sticky="w")
-        
+
         # Índice final de la sumatoria
         end_label = tk.Label(index_frame, text="Índice final (end):", bg="#f0f0f0")
         end_label.grid(row=1, column=0, padx=5, pady=5, sticky="w")
-        
+
         self.end_var = tk.StringVar(value="10")
-        end_entry = ttk.Entry(index_frame, textvariable=self.end_var, width=10)
+        end_entry = ValidatedEntry(index_frame, textvariable=self.end_var, 
+                                  allow_float=False, max_length=6, width=10)
         end_entry.grid(row=1, column=1, padx=5, pady=5, sticky="w")
+
     
     def _init_result_frames(self, parent):
         # Frame para resultados
@@ -342,34 +416,38 @@ class SeriesCalculator(tk.Tk):
         # Primer término
         a1_label = tk.Label(self.params_frame, text="Primer término (a₁):", bg="#f0f0f0")
         a1_label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
-        
+
         self.a1_var = tk.StringVar(value="1")
-        a1_entry = ttk.Entry(self.params_frame, textvariable=self.a1_var, width=10)
+        a1_entry = ValidatedEntry(self.params_frame, textvariable=self.a1_var, 
+                                 allow_float=True, max_length=8, width=10)
         a1_entry.grid(row=0, column=1, padx=5, pady=5)
-        
+
         # Diferencia común
         d_label = tk.Label(self.params_frame, text="Diferencia común (d):", bg="#f0f0f0")
         d_label.grid(row=1, column=0, padx=5, pady=5, sticky="w")
-        
+
         self.d_var = tk.StringVar(value="2")
-        d_entry = ttk.Entry(self.params_frame, textvariable=self.d_var, width=10)
+        d_entry = ValidatedEntry(self.params_frame, textvariable=self.d_var, 
+                                allow_float=True, max_length=8, width=10)
         d_entry.grid(row=1, column=1, padx=5, pady=5)
     
     def _create_geometric_inputs(self):
         # Primer término
         a1_label = tk.Label(self.params_frame, text="Primer término (a₁):", bg="#f0f0f0")
         a1_label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
-        
+
         self.a1_var = tk.StringVar(value="1")
-        a1_entry = ttk.Entry(self.params_frame, textvariable=self.a1_var, width=10)
+        a1_entry = ValidatedEntry(self.params_frame, textvariable=self.a1_var, 
+                                 allow_float=True, max_length=8, width=10)
         a1_entry.grid(row=0, column=1, padx=5, pady=5)
-        
+
         # Razón común
         r_label = tk.Label(self.params_frame, text="Razón común (r):", bg="#f0f0f0")
         r_label.grid(row=1, column=0, padx=5, pady=5, sticky="w")
-        
+
         self.r_var = tk.StringVar(value="2")
-        r_entry = ttk.Entry(self.params_frame, textvariable=self.r_var, width=10)
+        r_entry = ValidatedEntry(self.params_frame, textvariable=self.r_var, 
+                                allow_float=True, max_length=8, width=10)
         r_entry.grid(row=1, column=1, padx=5, pady=5)
     
     def _create_harmonic_inputs(self):
@@ -396,7 +474,6 @@ class SeriesCalculator(tk.Tk):
         elif series_type == "Serie Geométrica":
             serie_temp = SerieFactory.create_serie(series_type, 0, 0, a1=0, r=0)
         elif series_type == "Serie Armónica":
-            # Fix: Pass the harmonic type as a keyword argument with the correct parameter name
             serie_temp = SerieFactory.create_serie(series_type, 0, 0, tipo=self.harmonic_type.get())
 
         # Obtener la notación LaTeX genérica
@@ -421,42 +498,119 @@ class SeriesCalculator(tk.Tk):
     
     def calculate_series(self):
         try:
-            start = int(self.start_var.get())
-            end = int(self.end_var.get())
-            
+            # Validate specific fields first
+            try:
+                start = int(self.start_var.get())
+                if start <= 0 and self.series_var.get() == "Serie Armónica":
+                    messagebox.showerror("Error", "El índice inicial para series armónicas debe ser mayor que 0")
+                    return
+            except ValueError:
+                messagebox.showerror("Error", "El índice inicial debe ser un número entero válido")
+                return
+
+            try:
+                end = int(self.end_var.get())
+                if end < start:
+                    messagebox.showerror("Error", "El índice final debe ser mayor o igual al índice inicial")
+                    return
+                if end - start > 1000:
+                    response = messagebox.askquestion("Advertencia", 
+                        "Calcular una serie con muchos términos puede llevar tiempo. ¿Desea continuar?")
+                    if response != 'yes':
+                        return
+            except ValueError:
+                messagebox.showerror("Error", "El índice final debe ser un número entero válido")
+                return
+
             series_type = self.series_var.get()
-            
-            # Crear la serie usando el Factory
-            serie = None
+
+            # Validate series-specific parameters
             if series_type == "Serie Aritmética":
-                a1 = float(self.a1_var.get())
-                d = float(self.d_var.get())
+                try:
+                    a1 = float(self.a1_var.get())
+                except ValueError:
+                    messagebox.showerror("Error", "El primer término (a₁) debe ser un número válido")
+                    return
+
+                try:
+                    d = float(self.d_var.get())
+                except ValueError:
+                    messagebox.showerror("Error", "La diferencia común (d) debe ser un número válido")
+                    return
+
                 serie = SerieFactory.create_serie(series_type, start, end, a1=a1, d=d)
+
             elif series_type == "Serie Geométrica":
-                a1 = float(self.a1_var.get())
-                r = float(self.r_var.get())
+                try:
+                    a1 = float(self.a1_var.get())
+                except ValueError:
+                    messagebox.showerror("Error", "El primer término (a₁) debe ser un número válido")
+                    return
+
+                try:
+                    r = float(self.r_var.get())
+                    if r == 1.0 and start != end:
+                        response = messagebox.askokcancel("Advertencia", 
+                            "Una serie geométrica con r=1 es simplemente a₁ repetido n veces. ¿Continuar?")
+                        if not response:
+                            return
+                    if abs(r) > 10 and end - start > 20:
+                        response = messagebox.askquestion("Advertencia", 
+                            "Valores altos de r pueden producir resultados muy grandes. ¿Desea continuar?")
+                        if response != 'yes':
+                            return
+                except ValueError:
+                    messagebox.showerror("Error", "La razón común (r) debe ser un número válido")
+                    return
+
                 serie = SerieFactory.create_serie(series_type, start, end, a1=a1, r=r)
+
             elif series_type == "Serie Armónica":
                 harmonic_type = self.harmonic_type.get()
                 serie = SerieFactory.create_serie(series_type, start, end, tipo=harmonic_type)
-            
+
             # Calcular la suma y obtener los términos
             try:
                 sum_total, terms = serie.calcular_suma()
-            except ValueError as e:
-                messagebox.showerror("Error", str(e))
+
+                # Verificar si los resultados son válidos
+                if any(not np.isfinite(term) for term in terms):
+                    messagebox.showwarning("Advertencia", 
+                        "Algunos términos de la serie contienen valores infinitos o indefinidos.")
+
+                if not np.isfinite(sum_total):
+                    messagebox.showwarning("Advertencia", 
+                        "La suma de la serie es infinita o indefinida. Se mostrarán los términos pero el resultado total puede no ser preciso.")
+
+            except Exception as e:
+                messagebox.showerror("Error de cálculo", 
+                    f"No se pudo calcular la serie: {str(e)}")
                 return
-            
-            # Calcular sumas parciales
-            partial_sums = [sum(terms[:i+1]) for i in range(len(terms))]
-            
-            # Actualizar la visualización
-            self._display_latex_in_frame(serie.get_summation_latex(), self.summation_frame)
-            self._update_results_display(serie, sum_total, terms, partial_sums)
-            
-        except ValueError as e:
-            messagebox.showerror("Error", "Por favor, ingrese valores numéricos válidos")
-            print(f"Error: {e}")
+
+            # Calculate partial sums (handle potential overflow)
+            try:
+                partial_sums = []
+                running_sum = 0
+                for term in terms:
+                    running_sum += term
+                    partial_sums.append(running_sum)
+            except Exception as e:
+                messagebox.showerror("Error", f"Error al calcular sumas parciales: {str(e)}")
+                return
+
+            # Update the display
+            try:
+                self._display_latex_in_frame(serie.get_summation_latex(), self.summation_frame)
+                self._update_results_display(serie, sum_total, terms, partial_sums)
+                messagebox.showinfo("Éxito", "Cálculo completado correctamente")
+            except Exception as e:
+                messagebox.showerror("Error de visualización", 
+                    f"No se pudieron mostrar los resultados: {str(e)}")
+
+        except Exception as e:
+            messagebox.showerror("Error inesperado", 
+                f"Ha ocurrido un error inesperado: {str(e)}")
+            print(f"Error inesperado: {e}")
     
     def _update_results_display(self, serie, sum_total, terms, partial_sums):
         # Limpiar frames anteriores
