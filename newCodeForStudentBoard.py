@@ -280,8 +280,12 @@ class AplicacionGUI:
         self.sistema = SistemaUniversidad()
         self.crear_interfaz()
         self.cargar_datos_ejemplo()
-
     def cargar_datos_ejemplo(self):
+        # Cargar cursos de ejemplo
+        cursos_universidad.agregar_curso("Programación")
+        cursos_universidad.agregar_curso("Matemáticas")
+        cursos_universidad.agregar_curso("Física")
+        cursos_universidad.agregar_curso("Química")
         # Datos de ejemplo para mejor visualización
         est1 = EstudiantePregrado("Juan", "Pérez", 20, 4)
         est1.agregar_curso("Programación")
@@ -912,7 +916,54 @@ class AplicacionGUI:
             self.actualizar_tabla()
         else:
             messagebox.showerror("Error", "No se pudo eliminar al estudiante.")
+    def agregar_curso_existente(self, combobox, listbox, estudiante):
+        curso = combobox.get().strip()
+        if not curso:
+            messagebox.showerror("Error", "Seleccione un curso de la lista.")
+            return
 
+        if curso in estudiante.cursos:
+            messagebox.showerror("Error", "El curso ya está en la lista.")
+            return
+
+        # Agregar el curso al estudiante
+        estudiante.agregar_curso(curso)
+        listbox.insert(tk.END, curso)
+        messagebox.showinfo("Éxito", f"Curso '{curso}' agregado correctamente.")
+
+    def agregar_nuevo_curso(self, entry_var, listbox, estudiante):
+        curso = entry_var.get().strip()
+        if not curso:
+            messagebox.showerror("Error", "El nombre del curso no puede estar vacío.")
+            return
+
+        if len(curso) < 3 or len(curso) > 50:
+            messagebox.showerror("Error", "El nombre del curso debe tener entre 3 y 50 caracteres.")
+            return
+
+        if curso in estudiante.cursos:
+            messagebox.showerror("Error", "El curso ya está en la lista.")
+            return
+
+        # Agregar el curso al estudiante y a la lista de cursos de la universidad
+        estudiante.agregar_curso(curso)
+        cursos_universidad.agregar_curso(curso)
+        listbox.insert(tk.END, curso)
+        entry_var.set("")
+        messagebox.showinfo("Éxito", f"Curso '{curso}' agregado correctamente.")
+
+    def eliminar_curso(self, listbox, estudiante):
+        seleccionado = listbox.curselection()
+        if not seleccionado:
+            messagebox.showinfo("Información", "Seleccione un curso para eliminar.")
+            return
+
+        curso = listbox.get(seleccionado[0])
+        if estudiante.eliminar_curso(curso):
+            listbox.delete(seleccionado[0])
+            messagebox.showinfo("Éxito", f"Curso '{curso}' eliminado correctamente.")
+        else:
+            messagebox.showerror("Error", "No se pudo eliminar el curso.")
     def abrir_ventana_cursos(self):
         # Obtener el estudiante seleccionado
         item_seleccionado = self.tabla.selection()
@@ -956,78 +1007,36 @@ class AplicacionGUI:
         scrollbar.grid(row=1, column=1, sticky=tk.NS)
         listbox_cursos.configure(yscrollcommand=scrollbar.set)
 
-        # Cargar cursos actuales
-        cursos = estudiante.cursos
-        for curso in cursos:
+        # Cargar cursos actuales del estudiante
+        cursos_estudiante = estudiante.cursos
+        for curso in cursos_estudiante:
             listbox_cursos.insert(tk.END, curso)
 
         # Frame para agregar nuevo curso
         frame_nuevo = ttk.Frame(frame_cursos)
         frame_nuevo.grid(row=2, column=0, sticky=tk.W, pady=15)
 
-        ttk.Label(frame_nuevo, text="Nuevo Curso:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        # Combobox para seleccionar cursos existentes
+        ttk.Label(frame_nuevo, text="Seleccionar Curso:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        combobox_cursos = ttk.Combobox(frame_nuevo, values=cursos_universidad.get_cursos(), width=30)
+        combobox_cursos.grid(row=0, column=1, sticky=tk.W, pady=5)
+
+        # Botón para seleccionar curso existente
+        ttk.Button(frame_nuevo, text="Agregar Curso Existente", command=lambda: self.agregar_curso_existente(combobox_cursos, listbox_cursos, estudiante)).grid(row=0, column=2, padx=5)
+
+        # Campo para agregar nuevo curso
+        ttk.Label(frame_nuevo, text="Nuevo Curso:").grid(row=1, column=0, sticky=tk.W, pady=5)
         nuevo_curso_var = tk.StringVar()
         entry_nuevo = ttk.Entry(frame_nuevo, textvariable=nuevo_curso_var, width=30)
-        entry_nuevo.grid(row=0, column=1, sticky=tk.W, pady=5)
+        entry_nuevo.grid(row=1, column=1, sticky=tk.W, pady=5)
 
-        # Combobox para seleccionar cursos existentes
-        ttk.Label(frame_nuevo, text="Seleccionar Curso:").grid(row=1, column=0, sticky=tk.W, pady=5)
-        combobox_cursos = ttk.Combobox(frame_nuevo, values=cursos_universidad.get_cursos(), width=27)
-        combobox_cursos.grid(row=1, column=1, sticky=tk.W, pady=5)
+        # Botón para agregar nuevo curso
+        ttk.Button(frame_nuevo, text="Agregar Nuevo Curso", command=lambda: self.agregar_nuevo_curso(nuevo_curso_var, listbox_cursos, estudiante)).grid(row=1, column=2, padx=5)
 
-        # Función para agregar un curso
-        def agregar_curso():
-            curso = nuevo_curso_var.get().strip()
-            if not curso:
-                messagebox.showerror("Error", "El nombre del curso no puede estar vacío.")
-                return
+        # Botón para eliminar curso
+        ttk.Button(frame_cursos, text="Eliminar Curso", command=lambda: self.eliminar_curso(listbox_cursos, estudiante)).grid(row=3, column=0, sticky=tk.W, pady=5)
 
-            if len(curso) < 3 or len(curso) > 50:
-                messagebox.showerror("Error", "El nombre del curso debe tener entre 3 y 50 caracteres.")
-                return
-
-            if curso in estudiante.cursos:
-                messagebox.showerror("Error", "El curso ya está en la lista.")
-                return
-
-            estudiante.agregar_curso(curso)
-            listbox_cursos.insert(tk.END, curso)
-            nuevo_curso_var.set("")
-            messagebox.showinfo("Éxito", f"Curso '{curso}' agregado correctamente.")
-
-        # Función para seleccionar un curso existente
-        def seleccionar_curso():
-            curso = combobox_cursos.get()
-            if not curso:
-                messagebox.showerror("Error", "Seleccione un curso de la lista.")
-                return
-
-            if curso in estudiante.cursos:
-                messagebox.showerror("Error", "El curso ya está en la lista.")
-                return
-
-            estudiante.agregar_curso(curso)
-            listbox_cursos.insert(tk.END, curso)
-            messagebox.showinfo("Éxito", f"Curso '{curso}' agregado correctamente.")
-
-        # Función para eliminar un curso
-        def eliminar_curso():
-            seleccionado = listbox_cursos.curselection()
-            if not seleccionado:
-                messagebox.showinfo("Información", "Seleccione un curso para eliminar.")
-                return
-
-            curso = listbox_cursos.get(seleccionado[0])
-            if estudiante.eliminar_curso(curso):
-                listbox_cursos.delete(seleccionado[0])
-                messagebox.showinfo("Éxito", f"Curso '{curso}' eliminado correctamente.")
-            else:
-                messagebox.showerror("Error", "No se pudo eliminar el curso.")
-
-        # Botones
-        ttk.Button(frame_nuevo, text="Agregar", command=agregar_curso).grid(row=0, column=2, padx=5)
-        ttk.Button(frame_nuevo, text="Seleccionar", command=seleccionar_curso).grid(row=1, column=2, padx=5)
-        ttk.Button(frame_cursos, text="Eliminar Curso", command=eliminar_curso).grid(row=3, column=0, sticky=tk.W, pady=5)
+        # Botón para cerrar la ventana
         ttk.Button(frame_cursos, text="Cerrar", command=ventana.destroy).grid(row=4, column=0, sticky=tk.W, pady=15)
 
 # Punto de entrada principal
