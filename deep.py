@@ -16,39 +16,91 @@ from tkinter import ttk, messagebox, simpledialog
 
 # Validadores para los campos del formulario
 class Validadores:
+    """Clase encargada de las validaciones de entrada de datos en el sistema."""
     @staticmethod
     def validar_nombre(nombre: str) -> bool:
-        return bool(re.match(r'^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]{2,30}$', nombre))
+        """Valida que el nombre cumpla con el formato requerido, que no solo tenga letras espacios y numeros son admitidos.
+        
+        Args:
+            nombre (str): El nombre a validar.
+            
+        Returns:
+            bool: True si el nombre es válido, False en caso contrario.
+        """
+        return bool(re.match(r'^[A-Za-zÁÉÍÓÚáéíóúÑñ0-9\s]{2,30}$', nombre))
     
     @staticmethod
     def normalize_text(text: str) -> str:
-        """Normaliza texto: elimina acentos, convierte a minúsculas y remueve caracteres especiales"""
+        """Normaliza el texto eliminando acentos, convirtiendo a minúsculas y removiendo caracteres especiales.
+        
+        Args:
+            text (str): El texto a normalizar.
+            
+        Returns:
+            str: El texto normalizado.
+        """
         normalized = unicodedata.normalize('NFKD', text.lower()).encode('ascii', 'ignore').decode('ascii')
         return re.sub(r'[^\w\s]', '', normalized).strip()
     
     @staticmethod
     def validar_edad(edad: str) -> bool:
+        """Valida que la edad esté dentro del rango permitido [10,100].
+        
+        Args:
+            edad (str): La edad a validar.
+            
+        Returns:
+            bool: True si la edad es válida, False en caso contrario.
+        """
         try:
             edad_num = int(edad)
-            return 16 <= edad_num <= 100
+            return 10 <= edad_num <= 100
         except ValueError:
             return False
 
     @staticmethod
     def validar_semestre(semestre: str) -> bool:
+        """Valida que el semestre esté dentro del rango permitido [1, 15].
+        
+        Args:
+            semestre (str): El semestre a validar.
+            
+        Returns:
+            bool: True si el semestre es válido, False en caso contrario.
+        """
         try:
             semestre_num = int(semestre)
-            return 1 <= semestre_num <= 12
+            return 1 <= semestre_num <= 15
         except ValueError:
             return False
 
     @staticmethod
     def validar_programa(programa: str) -> bool:
+        """Valida que el programa tenga una longitud válida.
+        
+        Args:
+            programa (str): El programa a validar.
+            
+        Returns:
+            bool: True si el programa es válido, False en caso contrario.
+        """
         return len(programa) >= 3 and len(programa) <= 50
 
 # Clase abstracta Estudiante
 class Estudiante(ABC):
+    """Clase abstracta que representa a un estudiante en el sistema."""
     def __init__(self, nombre: str, programa: str, apellido: str,identificacion: int, fecha_nacimiento: int, id_estudiante: str = None,  edad: int = None):
+        """Inicializa un estudiante con los datos básicos.
+        
+        Args:
+            nombre (str): Nombre del estudiante.
+            programa (str): Programa académico del estudiante.
+            apellido (str): Apellido del estudiante.
+            identificacion (int): Número de identificación del estudiante.
+            fecha_nacimiento (int): Fecha de nacimiento del estudiante.
+            id_estudiante (str, optional): ID único del estudiante. Si no se proporciona, se genera automáticamente.
+            edad (int, optional): Edad del estudiante. Si no se proporciona, se calcula automáticamente.
+        """
         self.__nombre = nombre
         self.__apellido = apellido
         self.__nombre_completo = Validadores.normalize_text(nombre + apellido)
@@ -106,6 +158,11 @@ class Estudiante(ABC):
     
     @property
     def edad(self) -> int:
+        """Calcula y obtiene la edad del estudiante basada en la fecha de nacimiento.
+        
+        Returns:
+            int: La edad del estudiante.
+        """
         try:
             fecha_nacimiento = datetime.strptime(self.fecha_nacimiento, "%Y-%m-%d").date()
             today = date.today()
@@ -115,10 +172,23 @@ class Estudiante(ABC):
             return 0
     
     def agregar_curso(self, curso: str) -> None:
+        """Agrega un curso a la lista de cursos del estudiante.
+        
+        Args:
+            curso (str): El nombre del curso a agregar.
+        """
         if curso not in self.__cursos:
             self.__cursos.append(curso)
 
     def eliminar_curso(self, curso: str) -> bool:
+        """Elimina un curso de la lista de cursos del estudiante.
+        
+        Args:
+            curso (str): El nombre del curso a eliminar.
+            
+        Returns:
+            bool: True si el curso fue eliminado, False si no estaba en la lista.
+        """
         if curso in self.__cursos:
             self.__cursos.remove(curso)
             return True
@@ -126,13 +196,28 @@ class Estudiante(ABC):
 
     @abstractmethod
     def mostrar_informacion(self) -> str:
+        """Muestra la información detallada del estudiante.
+        
+        Returns:
+            str: La información del estudiante en formato de texto.
+        """
         pass
 
     @abstractmethod
     def get_tipo(self) -> str:
+        """Obtiene el tipo de estudiante (Pregrado o Posgrado).
+        
+        Returns:
+            str: El tipo de estudiante.
+        """
         pass
 
     def __str__(self) -> str:
+        """Representación en cadena del estudiante.
+        
+        Returns:
+            str: El nombre completo y el ID del estudiante.
+        """
         return f"{self.__nombre} {self.__apellido} (ID: {self.__id})"
 
 
@@ -185,11 +270,13 @@ class EstudiantePosgrado(Estudiante):
         return "Posgrado"
 
 class CRUDExcel:
+    """Clase que maneja las operaciones CRUD (Crear, Leer, Actualizar, Eliminar) en un archivo Excel."""
     def __init__(self, file_name="data.xlsx"):
         self.file_name = file_name
         self._ensure_file_exists()
 
     def _ensure_file_exists(self):
+        """Asegura que el archivo Excel exista. Si no existe, crea un archivo vacío."""
         if not os.path.exists(self.file_name):
             with pd.ExcelWriter(self.file_name, engine='openpyxl') as writer:
                 df = pd.DataFrame()  # Crea un DataFrame vacío
@@ -197,6 +284,14 @@ class CRUDExcel:
 
 
     def _get_sheet(self, sheet_name):
+        """Obtiene una hoja específica del archivo Excel.
+        
+        Args:
+            sheet_name (str): El nombre de la hoja.
+            
+        Returns:
+            pd.DataFrame: Un DataFrame con los datos de la hoja.
+        """
         try:
             return pd.read_excel(self.file_name, sheet_name=sheet_name, engine="openpyxl")
         except ValueError:
@@ -204,6 +299,12 @@ class CRUDExcel:
 
 
     def create(self, sheet_name: str, data):
+        """Crea un nuevo registro en una hoja específica del archivo Excel.
+        
+        Args:
+            sheet_name (str): El nombre de la hoja.
+            data: Los datos a agregar (puede ser un diccionario o una lista de diccionarios).
+        """
         df = self._get_sheet(sheet_name)
 
         # Asegurar que data sea una lista de diccionarios
@@ -225,6 +326,15 @@ class CRUDExcel:
 
 
     def read(self, sheet_name: str, filter_by: dict = None):
+        """Lee los datos de una hoja específica del archivo Excel.
+        
+        Args:
+            sheet_name (str): El nombre de la hoja.
+            filter_by (dict, optional): Filtros para aplicar a los datos.
+            
+        Returns:
+            pd.DataFrame: Un DataFrame con los datos filtrados.
+        """
         df = self._get_sheet(sheet_name)
         if filter_by:
             for key, value in filter_by.items():
@@ -232,6 +342,16 @@ class CRUDExcel:
         return df
 
     def update(self, sheet_name: str, filter_by: dict, updates: dict):
+        """Actualiza los registros en una hoja específica del archivo Excel.
+        
+        Args:
+            sheet_name (str): El nombre de la hoja.
+            filter_by (dict): Filtros para encontrar los registros a actualizar.
+            updates (dict): Los nuevos valores a actualizar.
+            
+        Returns:
+            bool: True si la actualización fue exitosa, False en caso contrario.
+        """
         df = self._get_sheet(sheet_name)
         index = df
         for key, value in filter_by.items():
@@ -247,6 +367,12 @@ class CRUDExcel:
         return False
 
     def delete(self, sheet_name: str, filter_by: dict):
+        """Elimina registros de una hoja específica del archivo Excel.
+        
+        Args:
+            sheet_name (str): El nombre de la hoja.
+            filter_by (dict): Filtros para encontrar los registros a eliminar.
+        """
         df = self._get_sheet(sheet_name)
         for key, value in filter_by.items():
             df = df[df[key] != value]
@@ -255,6 +381,7 @@ class CRUDExcel:
 
 
 class SistemaUniversidad:
+    """Clase principal que gestiona el sistema universitario, incluyendo estudiantes, programas y cursos."""
     def __init__(self, db_file="data.xlsx"):
         self.db = CRUDExcel(db_file)
         self._cargar_estudiantes()
@@ -264,6 +391,7 @@ class SistemaUniversidad:
 
 
     def _cargar_estudiantes(self):
+        """Carga los estudiantes desde la base de datos."""
         self.estudiantes = {}
         try:
             df_pregrado = self.db.read("EstudiantesPregrado")
@@ -304,6 +432,7 @@ class SistemaUniversidad:
             print(f"Error al cargar estudiantes: {e}")
             
     def _cargar_programas(self):
+        """Carga los programas académicos desde la base de datos."""
         try:
             df_programas = self.db.read("Programas")
             if not df_programas.empty:
@@ -327,6 +456,7 @@ class SistemaUniversidad:
             self.programas = []
 
     def _cargar_cursos(self):
+        """Carga los cursos desde la base de datos."""
         try:
             df_cursos = self.db.read("Cursos")
             if not df_cursos.empty:
@@ -349,7 +479,97 @@ class SistemaUniversidad:
             print(f"Error al cargar cursos: {e}")
             self.cursos = []
 
+    def cargar_datos_de_prueba(self):
+        # Crear programas de prueba
+        programas_prueba = [
+            {"nombre": "Ingeniería de Sistemas", "tipo": "Pregrado"},
+            {"nombre": "Medicina", "tipo": "Pregrado"},
+            {"nombre": "Maestría en Ciencias de la Computación", "tipo": "Posgrado"},
+        ]
+        for programa in programas_prueba:
+            self.agregar_programa(programa)
+
+        # Crear cursos de prueba
+        cursos_prueba = [
+            {"nombre": "Introducción a la Programación", "tipo": "Pregrado"},
+            {"nombre": "Cálculo I", "tipo": "Pregrado"},
+            {"nombre": "Inteligencia Artificial", "tipo": "Posgrado"},
+        ]
+        for curso in cursos_prueba:
+            self.agregar_curso(curso)
+
+        # Crear estudiantes de prueba
+        estudiantes_prueba = [
+            {
+                "nombre": "Juan",
+                "apellido": "Pérez",
+                "identificacion": 123456789,
+                "fecha_nacimiento": "1995-05-15",
+                "programa": "Ingeniería de Sistemas",
+                "semestre": 5,
+                "cursos": ["Introducción a la Programación", "Cálculo I"],
+                "tipo": "Pregrado"
+            },
+            {
+                "nombre": "María",
+                "apellido": "Gómez",
+                "identificacion": 987654321,
+                "fecha_nacimiento": "1990-10-20",
+                "programa": "Medicina",
+                "semestre": 8,
+                "cursos": ["Cálculo I"],
+                "tipo": "Pregrado"
+            },
+            {
+                "nombre": "Carlos",
+                "apellido": "López",
+                "identificacion": 456789123,
+                "fecha_nacimiento": "1988-03-25",
+                "programa": "Maestría en Ciencias de la Computación",
+                "pregrado": "Ingeniería de Sistemas",
+                "cursos": ["Inteligencia Artificial"],
+                "tipo": "Posgrado"
+            }
+        ]
+
+        for estudiante in estudiantes_prueba:
+            if estudiante["tipo"] == "Pregrado":
+                nuevo_estudiante = EstudiantePregrado(
+                    nombre=estudiante["nombre"],
+                    apellido=estudiante["apellido"],
+                    identificacion=estudiante["identificacion"],
+                    fecha_nacimiento=estudiante["fecha_nacimiento"],
+                    programa=estudiante["programa"],
+                    semestre=estudiante["semestre"]
+                )
+            else:
+                nuevo_estudiante = EstudiantePosgrado(
+                    nombre=estudiante["nombre"],
+                    apellido=estudiante["apellido"],
+                    identificacion=estudiante["identificacion"],
+                    fecha_nacimiento=estudiante["fecha_nacimiento"],
+                    programa=estudiante["programa"],
+                    pregrado=estudiante["pregrado"]
+                )
+
+            # Agregar cursos al estudiante
+            for curso in estudiante["cursos"]:
+                nuevo_estudiante.agregar_curso(curso)
+
+            # Agregar el estudiante al sistema
+            self.agregar_estudiante(nuevo_estudiante)
+
+        print("Datos de prueba cargados correctamente.")
+    
     def agregar_estudiante(self, estudiante: Estudiante) -> bool:
+        """Agrega un nuevo estudiante al sistema.
+        
+        Args:
+            estudiante (Estudiante): El estudiante a agregar.
+            
+        Returns:
+            bool: True si el estudiante fue agregado, False en caso contrario.
+        """
         if estudiante.identificacion in self.identificaciones:
             messagebox.showwarning("Identificación duplicada", "El número de identificación ya existe.")
             return False
@@ -380,9 +600,26 @@ class SistemaUniversidad:
         return True
     
     def buscar_estudiante(self, id_estudiante: str) -> Optional[Estudiante]:
+        """Busca un estudiante por su ID.
+        
+        Args:
+            id_estudiante (str): El ID del estudiante a buscar.
+            
+        Returns:
+            Optional[Estudiante]: El estudiante encontrado o None si no existe.
+        """
         return self.estudiantes.get(id_estudiante)
     
     def buscar_estudiantes_por_criterio(self, criterio: str, valor: str) -> List[Estudiante]:
+        """Busca estudiantes por un criterio específico.
+        
+        Args:
+            criterio (str): El criterio de búsqueda (nombre, programa, id).
+            valor (str): El valor a buscar.
+            
+        Returns:
+            List[Estudiante]: Lista de estudiantes que coinciden con el criterio.
+        """
         resultados = []
         valor_normalizado = Validadores.normalize_text(valor)
         
@@ -399,6 +636,15 @@ class SistemaUniversidad:
         return resultados
     
     def editar_estudiante(self, id_estudiante: str, datos: Dict[str, any]) -> bool:
+        """Edita la información de un estudiante.
+        
+        Args:
+            id_estudiante (str): El ID del estudiante a editar.
+            datos (Dict[str, any]): Los nuevos datos del estudiante.
+            
+        Returns:
+            bool: True si la edición fue exitosa, False en caso contrario.
+        """
         estudiante = self.buscar_estudiante(id_estudiante)
         if not estudiante:
             return False
@@ -424,6 +670,14 @@ class SistemaUniversidad:
         return True
     
     def eliminar_estudiante(self, id_estudiante: str) -> bool:
+        """Elimina un estudiante del sistema.
+        
+        Args:
+            id_estudiante (str): El ID del estudiante a eliminar.
+            
+        Returns:
+            bool: True si el estudiante fue eliminado, False en caso contrario.
+        """
         estudiante = self.buscar_estudiante(id_estudiante)
         if not estudiante:
             return False
@@ -437,6 +691,15 @@ class SistemaUniversidad:
         return True
     
     def agregar_curso_a_estudiante(self, id_estudiante: str, curso: str) -> bool:
+        """Agrega un curso a un estudiante.
+        
+        Args:
+            id_estudiante (str): El ID del estudiante.
+            curso (str): El nombre del curso a agregar.
+            
+        Returns:
+            bool: True si el curso fue agregado, False en caso contrario.
+        """
         estudiante = self.buscar_estudiante(id_estudiante)
         if not estudiante:
             return False
@@ -452,6 +715,15 @@ class SistemaUniversidad:
         return True
     
     def eliminar_curso_de_estudiante(self, id_estudiante: str, curso: str) -> bool:
+        """Elimina un curso de un estudiante.
+        
+        Args:
+            id_estudiante (str): El ID del estudiante.
+            curso (str): El nombre del curso a eliminar.
+            
+        Returns:
+            bool: True si el curso fue eliminado, False en caso contrario.
+        """
         estudiante = self.buscar_estudiante(id_estudiante)
         if not estudiante:
             return False
@@ -468,6 +740,11 @@ class SistemaUniversidad:
         return True
     
     def calcular_edad_promedio(self) -> float:
+        """Calcula la edad promedio de los estudiantes.
+        
+        Returns:
+            float: La edad promedio.
+        """
         if not self.estudiantes:
             return 0
         
@@ -475,6 +752,14 @@ class SistemaUniversidad:
         return total_edad / len(self.estudiantes)
     
     def agregar_programa(self, programa: dict) -> bool:
+        """Agrega un nuevo programa académico al sistema.
+        
+        Args:
+            programa (dict): El programa a agregar.
+            
+        Returns:
+            bool: True si el programa fue agregado, False en caso contrario.
+        """
         if programa in self.programas:
             return False
         
@@ -483,6 +768,14 @@ class SistemaUniversidad:
         return True
     
     def agregar_curso(self, curso: dict) -> bool:
+        """Agrega un nuevo curso al sistema.
+        
+        Args:
+            curso (dict): El curso a agregar.
+            
+        Returns:
+            bool: True si el curso fue agregado, False en caso contrario.
+        """
         if curso in self.cursos:
             return False
         
@@ -1180,10 +1473,17 @@ class InterfazGrafica:
             # En caso de error, usar la fecha actual
             fecha_nacimiento.set_date(date.today())
         
-        ttk.Label(frame_form, text="Programa:").grid(row=4, column=0, sticky=tk.W, pady=5)
+        # Configurar el Combobox de programas
+        programas_filtrados = [
+            p["nombre"] for p in self.sistema.programas 
+            if p["tipo"] == estudiante.get_tipo() or p["tipo"] == "Ambos"
+        ]
         combo_programa = ttk.Combobox(frame_form, textvariable=var_programa, 
-                                     values=self.sistema.programas,state="readonly", width=30)
+                                     values=programas_filtrados, state="readonly", width=30)
         combo_programa.grid(row=4, column=1, sticky=tk.W, pady=5)
+
+        # Establecer el programa actual del estudiante
+        var_programa.set(estudiante.programa)
         
         # Campos específicos según tipo
         if estudiante.get_tipo() == "Pregrado":
@@ -1589,7 +1889,11 @@ class InterfazGrafica:
 
 # Punto de entrada de la aplicación
 if __name__ == "__main__":
-    respuesta =messagebox.askyesno("Iniciar", "¿Desea hacer una inyeccion de datos?")
     root = tk.Tk()
     app = InterfazGrafica(root)
+    # Preguntar si se desea cargar datos de prueba
+    respuesta = messagebox.askyesno("Datos de prueba", "¿Desea cargar datos de prueba?")
+    if respuesta:
+        app.sistema.cargar_datos_de_prueba()
+        app.mostrar_listado_estudiantes()  
     root.mainloop()
