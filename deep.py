@@ -1,26 +1,18 @@
+import os
 import random
-import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
-from tkcalendar import DateEntry
-from typing import List, Dict, Optional, Union
-import pandas as pd
-from datetime import date, datetime, timedelta 
-import os
-from faker import Faker
-
-# Asumiendo que ya tienes las clases Validadores, Estudiante, EstudiantePregrado, EstudiantePosgrado y CRUDExcel
-from datetime import date, datetime
-import os
-import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
 import re
-from abc import ABC, abstractmethod
 import unicodedata
 import uuid
+from abc import ABC, abstractmethod
+from datetime import date, datetime, timedelta
 from typing import List, Dict, Optional, Union
-from tkcalendar import Calendar
+
 import pandas as pd
 import openpyxl
+from tkcalendar import Calendar, DateEntry
+import tkinter as tk
+from tkinter import ttk, messagebox, simpledialog
+
 
 # Validadores para los campos del formulario
 class Validadores:
@@ -350,7 +342,7 @@ class SistemaUniversidad:
                     {"nombre": "Compiladores", "tipo": "Posgrado"},
                 ]
                 self.db.create("Cursos", self.cursos)
-            
+
             # Ordenar la lista de cursos alfabéticamente
             self.cursos.sort(key=lambda x: x["nombre"])
         except Exception as e:
@@ -482,20 +474,20 @@ class SistemaUniversidad:
         total_edad = sum(estudiante.edad for estudiante in self.estudiantes.values())
         return total_edad / len(self.estudiantes)
     
-    def agregar_programa(self, programa: str) -> bool:
+    def agregar_programa(self, programa: dict) -> bool:
         if programa in self.programas:
             return False
         
         self.programas.append(programa)
-        self.db.create("Programas", {"nombre": programa})
+        self.db.create("Programas", {"nombre": programa["nombre"], "tipo": programa["tipo"]})
         return True
     
-    def agregar_curso(self, curso: str) -> bool:
+    def agregar_curso(self, curso: dict) -> bool:
         if curso in self.cursos:
             return False
         
         self.cursos.append(curso)
-        self.db.create("Cursos", {"nombre": curso})
+        self.db.create("Cursos", {"nombre": curso["nombre"], "tipo": curso["tipo"]})
         return True
 
 
@@ -725,7 +717,7 @@ class InterfazGrafica:
         
         ttk.Label(frame_form, text="Programa:").grid(row=5, column=0, sticky=tk.W, pady=5)
         self.combo_programa = ttk.Combobox(frame_form, textvariable=self.var_programa, 
-                                          values=self.sistema.programas, width=30)
+                                          values=self.sistema.programas, state="readonly", width=30)
         self.combo_programa.grid(row=5, column=1, sticky=tk.W, pady=5)
         
         # Frame para los campos específicos (se actualiza según el tipo)
@@ -749,15 +741,23 @@ class InterfazGrafica:
         # Limpiar el frame de campos específicos
         for widget in self.frame_campos_especificos.winfo_children():
             widget.destroy()
-        
+
+        self.var_programa.set("")  
         tipo = self.var_tipo.get()
-        
+
+        # Filtrar programas según el tipo de estudiante
+        programas_filtrados = [
+            p["nombre"] for p in self.sistema.programas 
+            if p["tipo"] == tipo or p["tipo"] == "Ambos"
+        ]
+        self.combo_programa["values"] = programas_filtrados
+
         if tipo == "Pregrado":
             ttk.Label(self.frame_campos_especificos, text="Semestre:").grid(row=0, column=0, sticky=tk.W, pady=5)
             semestre_entry = ttk.Entry(self.frame_campos_especificos, textvariable=self.var_semestre, width=5)
             semestre_entry.grid(row=0, column=1, sticky=tk.W, pady=5)
             ttk.Label(self.frame_campos_especificos, text="Número entre 1-12", foreground="gray").grid(row=0, column=2, sticky=tk.W, pady=5)
-            
+
             # Permitir solo números en el campo de semestre
             def validar_semestre(P):
                 if not P:
@@ -766,10 +766,10 @@ class InterfazGrafica:
                     return False
                 val = int(P)
                 return 1 <= val <= 12
-            
+
             vcmd = (self.root.register(validar_semestre), '%P')
             semestre_entry.config(validate="key", validatecommand=vcmd)
-            
+
         elif tipo == "Posgrado":
             ttk.Label(self.frame_campos_especificos, text="Título de pregrado:").grid(row=0, column=0, sticky=tk.W, pady=5)
             ttk.Entry(self.frame_campos_especificos, textvariable=self.var_pregrado, width=30).grid(row=0, column=1, sticky=tk.W, pady=5)
@@ -1046,7 +1046,7 @@ class InterfazGrafica:
         ttk.Button(frame_botones, text="Cerrar", 
                   command=ventana_detalle.destroy).pack(side=tk.LEFT, padx=5)
     
-    def agregar_curso_a_estudiante(self, estudiante:Estudiante, ventana_detalle:tk.Toplevel):
+    def agregar_curso_a_estudiante(self, estudiante: Estudiante, ventana_detalle: tk.Toplevel):
         # Crear una ventana de diálogo para seleccionar curso
         ventana_curso = tk.Toplevel(self.root)
         ventana_curso.title("Agregar Curso")
@@ -1054,31 +1054,37 @@ class InterfazGrafica:
         ventana_curso.resizable(False, False)
         ventana_curso.transient(self.root)
         ventana_curso.grab_set()
-        
+
         ttk.Label(ventana_curso, text="Seleccione un curso para agregar:", 
                  font=('Arial', 11)).pack(pady=10)
-        
+
         # Variable para el curso seleccionado
         var_curso = tk.StringVar()
-        
+
+        # Filtrar cursos según el tipo de estudiante
+        cursos_filtrados = [
+            c["nombre"] for c in self.sistema.cursos 
+            if c["tipo"] == estudiante.get_tipo() or c["tipo"] == "Ambos"
+        ]
+
         # Combobox con los cursos disponibles
-        combo_cursos = ttk.Combobox(ventana_curso, textvariable=var_curso, values=self.sistema.cursos, width=40)
+        combo_cursos = ttk.Combobox(ventana_curso, textvariable=var_curso, values=cursos_filtrados,state="readonly", width=40)
         combo_cursos.pack(pady=10)
-        
+
         # Botones
         frame_botones = ttk.Frame(ventana_curso)
         frame_botones.pack(pady=10)
-        
+
         def guardar_curso():
             curso = var_curso.get().strip()
             if not curso:
                 messagebox.showwarning("Curso requerido", "Por favor seleccione un curso")
                 return
-            
+
             if curso in estudiante.cursos:
                 messagebox.showwarning("Curso duplicado", "El estudiante ya está inscrito en este curso")
                 return
-            
+
             if self.sistema.agregar_curso_a_estudiante(estudiante.id, curso):
                 messagebox.showinfo("Éxito", f"Curso '{curso}' agregado correctamente")
                 ventana_curso.destroy()
@@ -1087,7 +1093,7 @@ class InterfazGrafica:
                 self.mostrar_detalle_estudiante(estudiante.id)
             else:
                 messagebox.showerror("Error", "No se pudo agregar el curso")
-        
+
         ttk.Button(frame_botones, text="Guardar", command=guardar_curso).pack(side=tk.LEFT, padx=5)
         ttk.Button(frame_botones, text="Cancelar", command=ventana_curso.destroy).pack(side=tk.LEFT, padx=5)
     
@@ -1176,7 +1182,7 @@ class InterfazGrafica:
         
         ttk.Label(frame_form, text="Programa:").grid(row=4, column=0, sticky=tk.W, pady=5)
         combo_programa = ttk.Combobox(frame_form, textvariable=var_programa, 
-                                     values=self.sistema.programas, width=30)
+                                     values=self.sistema.programas,state="readonly", width=30)
         combo_programa.grid(row=4, column=1, sticky=tk.W, pady=5)
         
         # Campos específicos según tipo
@@ -1329,8 +1335,8 @@ class InterfazGrafica:
         self.lista_programas.pack(fill=tk.BOTH, expand=True)
         
         # Llenar lista de programas
-        for programa in self.sistema.programas:
-            self.lista_programas.insert(tk.END, programa)
+        for programa in sorted(self.sistema.programas, key=lambda x: x["nombre"]):
+            self.lista_programas.insert(tk.END, f"{programa['nombre']} ({programa['tipo']})")
         
         # Panel derecho - Formulario
         frame_form = ttk.LabelFrame(frame_principal, text="Agregar programa", padding=10)
@@ -1338,9 +1344,13 @@ class InterfazGrafica:
         
         # Variable para el nuevo programa
         self.var_nuevo_programa = tk.StringVar()
+        self.var_tipo_programa = tk.StringVar(value="Pregrado")
         
         ttk.Label(frame_form, text="Nombre del programa:").pack(anchor=tk.W, pady=5)
         ttk.Entry(frame_form, textvariable=self.var_nuevo_programa, width=30).pack(fill=tk.X, pady=5)
+        ttk.Label(frame_form, text="Tipo de programa:").pack(anchor=tk.W, pady=5)
+        ttk.Combobox(frame_form, textvariable=self.var_tipo_programa, 
+                values=["Pregrado", "Posgrado", "Ambos"], state="readonly").pack(fill=tk.X, pady=5)
         
         ttk.Button(frame_form, text="Agregar", command=self.agregar_programa).pack(pady=10)
         
@@ -1353,6 +1363,7 @@ class InterfazGrafica:
     
     def agregar_programa(self):
         programa = self.var_nuevo_programa.get().strip()
+        tipo = self.var_tipo_programa.get()
         
         if not programa or not Validadores.validar_programa(programa):
             messagebox.showwarning("Programa inválido", 
@@ -1363,48 +1374,75 @@ class InterfazGrafica:
             messagebox.showwarning("Programa duplicado", 
                                  "Este programa ya existe en el sistema")
             return
-        
-        if self.sistema.agregar_programa(programa):
+        nuevo_programa = {"nombre": programa, "tipo": tipo}
+        if self.sistema.agregar_programa(nuevo_programa):
             messagebox.showinfo("Éxito", f"Programa '{programa}' agregado correctamente")
             self.var_nuevo_programa.set("")  # Limpiar campo
             
             # Actualizar lista
             self.lista_programas.delete(0, tk.END)
-            for prog in self.sistema.programas:
-                self.lista_programas.insert(tk.END, prog)
+            for prog in sorted(self.sistema.programas, key=lambda x: x["nombre"]):
+                self.lista_programas.insert(tk.END, f"{prog['nombre']} ({prog['tipo']})")
         else:
             messagebox.showerror("Error", "No se pudo agregar el programa")
     
     def eliminar_programa(self):
-        # Verificar selección
+        # Verificar si hay un programa seleccionado
         if not self.lista_programas.curselection():
             messagebox.showwarning("Selección requerida", 
                                  "Por favor seleccione un programa para eliminar")
             return
-        
-        # Obtener programa seleccionado
+
+        # Obtener el índice del programa seleccionado
         index = self.lista_programas.curselection()[0]
-        programa = self.lista_programas.get(index)
-        
+
+        # Obtener el nombre del programa seleccionado
+        programa_seleccionado = self.lista_programas.get(index)
+
+        # Extraer solo el nombre del programa (sin el tipo entre paréntesis)
+        nombre_programa = programa_seleccionado.split(" (")[0]
+
         # Verificar si hay estudiantes usando este programa
-        estudiantes_con_programa = [e for e in self.sistema.estudiantes.values() if e.programa == programa]
+        estudiantes_con_programa = [
+            estudiante for estudiante in self.sistema.estudiantes.values() 
+            if estudiante.programa == nombre_programa
+        ]
+
         if estudiantes_con_programa:
             messagebox.showwarning("Programa en uso", 
-                                 f"No se puede eliminar el programa '{programa}' porque está siendo usado por {len(estudiantes_con_programa)} estudiante(s)")
+                                 f"No se puede eliminar el programa '{nombre_programa}' porque está siendo usado por {len(estudiantes_con_programa)} estudiante(s)")
             return
-        
+
         # Confirmar eliminación
         respuesta = messagebox.askyesno("Confirmar eliminación", 
-                                      f"¿Está seguro de eliminar el programa '{programa}'?")
+                                      f"¿Está seguro de eliminar el programa '{nombre_programa}'?")
         if not respuesta:
             return
-        
-        # Eliminar programa
-        if programa in self.sistema.programas:
-            self.sistema.programas.remove(programa)
+
+        # Eliminar el programa de la lista de programas del sistema
+        programa_a_eliminar = next(
+            (p for p in self.sistema.programas if p["nombre"] == nombre_programa), 
+            None
+        )
+
+        if programa_a_eliminar:
+            self.sistema.programas.remove(programa_a_eliminar)
+
+            # Eliminar el programa de la base de datos
+            self.sistema.db.delete("Programas", {"nombre": nombre_programa})
+
+            # Actualizar la lista de programas en la interfaz
             self.lista_programas.delete(index)
-            self.db.delete("Programas", {"nombre": programa})
-            messagebox.showinfo("Éxito", f"Programa '{programa}' eliminado correctamente")
+
+            # Actualizar el Combobox de programas en el formulario de agregar estudiante
+            if hasattr(self, 'combo_programa'):
+                programas_filtrados = [
+                    p["nombre"] for p in self.sistema.programas 
+                    if p["tipo"] == self.var_tipo.get() or p["tipo"] == "Ambos"
+                ]
+                self.combo_programa["values"] = programas_filtrados
+
+            messagebox.showinfo("Éxito", f"Programa '{nombre_programa}' eliminado correctamente")
         else:
             messagebox.showerror("Error", "No se pudo eliminar el programa")
 
@@ -1431,8 +1469,8 @@ class InterfazGrafica:
         self.lista_cursos.pack(fill=tk.BOTH, expand=True)
         
         # Llenar lista de cursos
-        for curso in self.sistema.cursos:
-            self.lista_cursos.insert(tk.END, curso)
+        for curso in sorted(self.sistema.cursos, key=lambda x: x["nombre"]):
+            self.lista_cursos.insert(tk.END, f"{curso['nombre']} ({curso['tipo']})")
         
         # Panel derecho - Formulario
         frame_form = ttk.LabelFrame(frame_principal, text="Agregar curso", padding=10)
@@ -1440,9 +1478,13 @@ class InterfazGrafica:
         
         # Variable para el nuevo curso
         self.var_nuevo_curso = tk.StringVar()
+        self.var_tipo_curso = tk.StringVar(value="Pregrado")
         
         ttk.Label(frame_form, text="Nombre del curso:").pack(anchor=tk.W, pady=5)
         ttk.Entry(frame_form, textvariable=self.var_nuevo_curso, width=30).pack(fill=tk.X, pady=5)
+        ttk.Label(frame_form, text="Tipo de curso:").pack(anchor=tk.W, pady=5)
+        ttk.Combobox(frame_form, textvariable=self.var_tipo_curso, 
+                 values=["Pregrado", "Posgrado", "Ambos"], state="readonly").pack(fill=tk.X, pady=5)
         
         ttk.Button(frame_form, text="Agregar", command=self.agregar_curso).pack(pady=10)
         
@@ -1454,26 +1496,27 @@ class InterfazGrafica:
         self.barra_estado.config(text="Gestión de cursos")
 
     def agregar_curso(self):
-        curso = self.var_nuevo_curso.get().strip()
+        nombre_curso = self.var_nuevo_curso.get().strip()
+        tipo_curso = self.var_tipo_curso.get()
         
-        if not curso or len(curso) < 3:
+        if not nombre_curso or len(nombre_curso) < 3:
             messagebox.showwarning("Curso inválido", 
                                  "El nombre del curso debe tener al menos 3 caracteres")
             return
         
-        if curso in self.sistema.cursos:
+        if nombre_curso in self.sistema.cursos:
             messagebox.showwarning("Curso duplicado", 
                                  "Este curso ya existe en el sistema")
             return
-        
-        if self.sistema.agregar_curso(curso):
-            messagebox.showinfo("Éxito", f"Curso '{curso}' agregado correctamente")
+        nuevo_curso = {"nombre": nombre_curso, "tipo": tipo_curso}
+        if self.sistema.agregar_curso(nuevo_curso):
+            messagebox.showinfo("Éxito", f"Curso '{nombre_curso}' agregado correctamente")
             self.var_nuevo_curso.set("")  # Limpiar campo
             
             # Actualizar lista
             self.lista_cursos.delete(0, tk.END)
             for cur in self.sistema.cursos:
-                self.lista_cursos.insert(tk.END, cur)
+                self.lista_cursos.insert(tk.END, f"{cur['nombre']} ({cur['tipo']})")
         else:
             messagebox.showerror("Error", "No se pudo agregar el curso")
 
@@ -1483,30 +1526,36 @@ class InterfazGrafica:
             messagebox.showwarning("Selección requerida", 
                                  "Por favor seleccione un curso para eliminar")
             return
-        
+
         # Obtener curso seleccionado
         index = self.lista_cursos.curselection()[0]
-        curso = self.lista_cursos.get(index)
-        
+        nombre_curso = self.lista_cursos.get(index)
+
+        # Buscar el curso en la lista de cursos
+        curso = next((c for c in self.sistema.cursos if c["nombre"] == nombre_curso), None)
+        if not curso:
+            messagebox.showerror("Error", "No se pudo encontrar el curso seleccionado")
+            return
+
         # Verificar si hay estudiantes usando este curso
-        estudiantes_con_curso = [e for e in self.sistema.estudiantes.values() if curso in e.cursos]
+        estudiantes_con_curso = [e for e in self.sistema.estudiantes.values() if nombre_curso in e.cursos]
         if estudiantes_con_curso:
             messagebox.showwarning("Curso en uso", 
-                                 f"No se puede eliminar el curso '{curso}' porque está siendo usado por {len(estudiantes_con_curso)} estudiante(s)")
+                                 f"No se puede eliminar el curso '{nombre_curso}' porque está siendo usado por {len(estudiantes_con_curso)} estudiante(s)")
             return
-        
+
         # Confirmar eliminación
         respuesta = messagebox.askyesno("Confirmar eliminación", 
-                                      f"¿Está seguro de eliminar el curso '{curso}'?")
+                                      f"¿Está seguro de eliminar el curso '{nombre_curso}'?")
         if not respuesta:
             return
-        
+
         # Eliminar curso
         if curso in self.sistema.cursos:
             self.sistema.cursos.remove(curso)
             self.lista_cursos.delete(index)
-            self.db.delete("Cursos", {"nombre": curso})
-            messagebox.showinfo("Éxito", f"Curso '{curso}' eliminado correctamente")
+            self.db.delete("Cursos", {"nombre": nombre_curso})
+            messagebox.showinfo("Éxito", f"Curso '{nombre_curso}' eliminado correctamente")
         else:
             messagebox.showerror("Error", "No se pudo eliminar el curso")
     db = CRUDExcel()
@@ -1540,105 +1589,7 @@ class InterfazGrafica:
 
 # Punto de entrada de la aplicación
 if __name__ == "__main__":
+    respuesta =messagebox.askyesno("Iniciar", "¿Desea hacer una inyeccion de datos?")
     root = tk.Tk()
     app = InterfazGrafica(root)
-    respuesta =messagebox.askyesno("Iniciar", "¿Desea hacer una inyeccion de datos?")
-    if respuesta:
-        # Configurar Faker para datos en español
-        fake = Faker('es_ES')
-
-        # Crear una instancia del sistema
-        sistema = SistemaUniversidad()
-
-        # Lista de programas académicos disponibles
-        programas_pregrado = [
-            "Ingeniería de Sistemas", "Ingeniería Civil", "Medicina", 
-            "Derecho", "Psicología", "Economía", "Administración de Empresas"
-        ]
-
-        programas_posgrado = [
-            "Maestría en Ciencias de la Computación", "Maestría en Inteligencia Artificial",
-            "Doctorado en Ingeniería", "Especialización en Gerencia de Proyectos"
-        ]
-
-        # Lista de cursos disponibles
-        cursos_disponibles = [
-            "Introducción a la Programación", "Matemáticas Discretas", "Cálculo I",
-            "Álgebra Lineal", "Física I", "Teoría de la Computación",
-            "Estructuras de Datos", "Bases de Datos", "Inteligencia Artificial",
-            "Desarrollo Web", "Seguridad Informática", "Compiladores"
-        ]
-
-        def generar_fecha_nacimiento():
-            """Genera una fecha de nacimiento aleatoria entre 16 y 30 años atrás."""
-            hoy = datetime.now()
-            edad = random.randint(16, 30)
-            fecha_nacimiento = hoy - timedelta(days=365 * edad)
-            return fecha_nacimiento.strftime("%Y-%m-%d")
-
-        def generar_estudiante_pregrado():
-            """Genera un estudiante de pregrado con datos aleatorios."""
-            nombre = fake.first_name()
-            apellido = fake.last_name()
-            identificacion = fake.unique.random_number(digits=10)
-            fecha_nacimiento = generar_fecha_nacimiento()
-            programa = random.choice(programas_pregrado)
-            semestre = random.randint(1, 12)
-
-            # Crear el estudiante
-            estudiante = EstudiantePregrado(
-                nombre=nombre,
-                apellido=apellido,
-                identificacion=identificacion,
-                fecha_nacimiento=fecha_nacimiento,
-                programa=programa,
-                semestre=semestre
-            )
-
-            # Asignar cursos aleatorios
-            cursos_estudiante = random.sample(cursos_disponibles, k=random.randint(1, 5))
-            for curso in cursos_estudiante:
-                estudiante.agregar_curso(curso)
-
-            return estudiante
-
-        def generar_estudiante_posgrado():
-            """Genera un estudiante de posgrado con datos aleatorios."""
-            nombre = fake.first_name()
-            apellido = fake.last_name()
-            identificacion = fake.unique.random_number(digits=10)
-            fecha_nacimiento = generar_fecha_nacimiento()
-            programa = random.choice(programas_posgrado)
-            pregrado = random.choice(programas_pregrado)  # Título de pregrado aleatorio
-
-            # Crear el estudiante
-            estudiante = EstudiantePosgrado(
-                nombre=nombre,
-                apellido=apellido,
-                identificacion=identificacion,
-                fecha_nacimiento=fecha_nacimiento,
-                programa=programa,
-                pregrado=pregrado
-            )
-
-            # Asignar cursos aleatorios
-            cursos_estudiante = random.sample(cursos_disponibles, k=random.randint(1, 5))
-            for curso in cursos_estudiante:
-                estudiante.agregar_curso(curso)
-
-            return estudiante
-
-        def inyectar_estudiantes(cantidad_pregrado=50, cantidad_posgrado=20):
-            """Inyecta una cantidad específica de estudiantes de pregrado y posgrado."""
-            print(f"Inyectando {cantidad_pregrado} estudiantes de pregrado y {cantidad_posgrado} de posgrado...")
-
-            for _ in range(cantidad_pregrado):
-                estudiante = generar_estudiante_pregrado()
-                sistema.agregar_estudiante(estudiante)
-
-            for _ in range(cantidad_posgrado):
-                estudiante = generar_estudiante_posgrado()
-                sistema.agregar_estudiante(estudiante)
-            print("Inyección completada.")
-        inyectar_estudiantes(cantidad_pregrado=100, cantidad_posgrado=30)
     root.mainloop()
