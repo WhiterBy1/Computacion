@@ -80,7 +80,7 @@ class Producto(Base):
         
         Args:
             session: SQLAlchemy session
-            texto: Text to search in ID, name or description
+            texto: Text to search in name or description
             precio_min: Minimum price
             precio_max: Maximum price
             stock_min: Minimum stock
@@ -95,9 +95,7 @@ class Producto(Base):
         
         filtros = []
         if texto:
-            # Search by ID (if it's a number) or by name/description
-            if texto.isdigit():
-                filtros.append(cls.id == int(texto))
+            # Search by name/description only (removed ID search)
             filtros.append(cls.nombre.like(f"%{texto}%"))
             filtros.append(cls.descripcion.like(f"%{texto}%"))
         
@@ -295,7 +293,7 @@ class SistemaInventario:
             
         except SQLAlchemyError as e:
             self.session.rollback()
-            return False, f"Error al agregar el producto: {str(e)}", None
+            return False, f"Error de base de datos: {str(e)}", None
     
     def editar_producto(self, id: int, nombre: str, descripcion: str, 
                        precio: float, cantidad_stock: int, ajuste_stock: int = 0) -> Tuple[bool, str]:
@@ -316,7 +314,7 @@ class SistemaInventario:
         try:
             producto = Producto.obtener_por_id(self.session, id)
             if not producto:
-                return False, f"No se encontró un producto con ID {id}."
+                return False, f"No se encontró el producto solicitado."
             
             # Validate data
             valido_nombre, msg_nombre = Validador.validar_texto(nombre, "Nombre")
@@ -367,7 +365,7 @@ class SistemaInventario:
             
         except SQLAlchemyError as e:
             self.session.rollback()
-            return False, f"Error al editar el producto: {str(e)}"
+            return False, f"Error de base de datos: {str(e)}"
     
     def ajustar_stock(self, id: int, cantidad: int) -> Tuple[bool, str]:
         """
@@ -383,7 +381,7 @@ class SistemaInventario:
         try:
             producto = Producto.obtener_por_id(self.session, id)
             if not producto:
-                return False, f"No se encontró un producto con ID {id}."
+                return False, f"No se encontró el producto solicitado."
             
             try:
                 producto.ajustar_stock(self.session, cantidad)
@@ -399,14 +397,14 @@ class SistemaInventario:
             
         except SQLAlchemyError as e:
             self.session.rollback()
-            return False, f"Error al ajustar el stock: {str(e)}"
+            return False, f"Error de base de datos: {str(e)}"
     
     def eliminar_producto(self, id: int) -> Tuple[bool, str]:
         """Deletes a product from the inventory."""
         try:
             producto = Producto.obtener_por_id(self.session, id)
             if not producto:
-                return False, f"No se encontró un producto con ID {id}."
+                return False, f"No se encontró el producto solicitado."
             
             nombre = producto.nombre
             producto.eliminar(self.session)
@@ -414,7 +412,7 @@ class SistemaInventario:
             
         except SQLAlchemyError as e:
             self.session.rollback()
-            return False, f"Error al eliminar el producto: {str(e)}"
+            return False, f"Error de base de datos: {str(e)}"
     
     def buscar_productos(self, texto: Optional[str] = None, 
                         precio_min: Optional[float] = None, 
@@ -435,14 +433,18 @@ class SistemaInventario:
                 order_by=order_by,
                 ascending=ascending
             )
-        except SQLAlchemyError:
+        except SQLAlchemyError as e:
+            # Mejorado: Mostrar el error en la consola para depuración
+            print(f"Error al buscar productos: {str(e)}")
             return []
     
     def obtener_todos_productos(self, order_by: str = None, ascending: bool = True) -> List[Producto]:
         """Gets all products from inventory with optional sorting."""
         try:
             return Producto.obtener_todos(self.session, order_by, ascending)
-        except SQLAlchemyError:
+        except SQLAlchemyError as e:
+            # Mejorado: Mostrar el error en la consola para depuración
+            print(f"Error al obtener productos: {str(e)}")
             return []
     
     def actualizar_precios_masivos(self, porcentaje: float, 
@@ -468,7 +470,7 @@ class SistemaInventario:
             
         except SQLAlchemyError as e:
             self.session.rollback()
-            return False, f"Error al actualizar los precios: {str(e)}", 0
+            return False, f"Error de base de datos: {str(e)}", 0
     
     def sincronizar_con_bd(self) -> Tuple[bool, str]:
         """
@@ -528,6 +530,7 @@ class EstiloUI:
     COLOR_EXITO = "#2ecc71"
     COLOR_ERROR = "#e74c3c"
     COLOR_ADVERTENCIA = "#f39c12"
+    COLOR_INFO = "#3498db"
     
     @staticmethod
     def aplicar_estilo(root):
@@ -555,6 +558,16 @@ class EstiloUI:
         style.configure("Titulo.TLabel", 
                        font=("Helvetica", 16, "bold"), 
                        foreground=EstiloUI.COLOR_PRIMARIO)
+        
+        # Estilos para mensajes de estado
+        style.configure("Exito.TLabel", 
+                       foreground=EstiloUI.COLOR_EXITO)
+        style.configure("Error.TLabel", 
+                       foreground=EstiloUI.COLOR_ERROR)
+        style.configure("Info.TLabel", 
+                       foreground=EstiloUI.COLOR_INFO)
+        style.configure("Advertencia.TLabel", 
+                       foreground=EstiloUI.COLOR_ADVERTENCIA)
         
         # Configure main window
         root.configure(background=EstiloUI.COLOR_FONDO)
@@ -590,6 +603,89 @@ class EstiloUI:
         marco.pack(fill="both", expand=True, padx=10, pady=10)
         
         return marco_exterior, marco
+    
+    @staticmethod
+    def mostrar_mensaje(label, mensaje, tipo="info"):
+        """
+        Muestra un mensaje en un label con el estilo correspondiente al tipo.
+        
+        Args:
+            label: Label donde mostrar el mensaje
+            mensaje: Texto del mensaje
+            tipo: Tipo de mensaje (exito, error, info, advertencia)
+        """
+        estilos = {
+            "exito": "Exito.TLabel",
+            "error": "Error.TLabel",
+            "info": "Info.TLabel",
+            "advertencia": "Advertencia.TLabel"
+        }
+        
+        estilo = estilos.get(tipo.lower(), "TLabel")
+        label.config(text=mensaje, style=estilo)
+
+class MensajeError(tk.Toplevel):
+    """Ventana emergente para mostrar errores detallados."""
+    
+    def __init__(self, parent, titulo, mensaje, detalles=None):
+        super().__init__(parent)
+        self.title(titulo)
+        self.geometry("400x300")
+        self.minsize(400, 200)
+        self.transient(parent)
+        self.grab_set()
+        
+        # Configurar estilo
+        self.configure(background=EstiloUI.COLOR_FONDO)
+        
+        # Icono de error
+        frame_icono = ttk.Frame(self, style="TFrame")
+        frame_icono.pack(fill="x", padx=20, pady=10)
+        
+        lbl_icono = ttk.Label(frame_icono, text="⚠", font=("Helvetica", 24), 
+                             foreground=EstiloUI.COLOR_ERROR, style="TLabel")
+        lbl_icono.pack(side="left", padx=(0, 10))
+        
+        lbl_mensaje = ttk.Label(frame_icono, text=mensaje, wraplength=300, 
+                               justify="left", style="TLabel")
+        lbl_mensaje.pack(side="left", fill="x", expand=True)
+        
+        # Detalles (opcional)
+        if detalles:
+            frame_detalles = ttk.Frame(self, style="TFrame")
+            frame_detalles.pack(fill="both", expand=True, padx=20, pady=10)
+            
+            lbl_detalles = ttk.Label(frame_detalles, text="Detalles:", 
+                                    anchor="w", style="TLabel")
+            lbl_detalles.pack(anchor="w")
+            
+            txt_detalles = tk.Text(frame_detalles, wrap="word", height=8, 
+                                  background="white", foreground=EstiloUI.COLOR_TEXTO)
+            txt_detalles.insert("1.0", detalles)
+            txt_detalles.config(state="disabled")
+            
+            scrollbar = ttk.Scrollbar(frame_detalles, orient="vertical", 
+                                     command=txt_detalles.yview)
+            txt_detalles.configure(yscrollcommand=scrollbar.set)
+            
+            txt_detalles.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+        
+        # Botón de cerrar
+        frame_botones = ttk.Frame(self, style="TFrame")
+        frame_botones.pack(fill="x", padx=20, pady=10)
+        
+        btn_cerrar = ttk.Button(frame_botones, text="Cerrar", 
+                               command=self.destroy)
+        btn_cerrar.pack(side="right")
+        
+        # Centrar ventana
+        self.update_idletasks()
+        width = self.winfo_width()
+        height = self.winfo_height()
+        x = (self.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.winfo_screenheight() // 2) - (height // 2)
+        self.geometry(f"{width}x{height}+{x}+{y}")
 
 class AplicacionInventario:
     """Main application class."""
@@ -611,12 +707,11 @@ class AplicacionInventario:
         self.crear_interfaz()
         
         # Current sort state
-        self.sort_column = "id"  # Default sort column
+        self.sort_column = "nombre"  # Cambiado: Default sort column ahora es nombre en lugar de id
         self.sort_ascending = True  # Default sort direction
         
         # Sort column display names and mapping
         self.column_display_names = {
-            "id": "ID",
             "nombre": "Nombre",
             "descripcion": "Descripción",
             "precio": "Precio",
@@ -625,7 +720,6 @@ class AplicacionInventario:
         
         # Column mapping for combobox to database fields
         self.column_mapping = {
-            "ID": "id",
             "Nombre": "nombre",
             "Descripción": "descripcion",
             "Precio": "precio",
@@ -690,10 +784,10 @@ class AplicacionInventario:
         lbl_ordenar = ttk.Label(marco_ordenar, text="Ordenar por:", style="TLabel")
         lbl_ordenar.pack(side="left", padx=(0, 5))
         
-        # Sort column combobox
-        self.var_ordenar_columna = tk.StringVar(value="ID")
+        # Sort column combobox - Eliminado ID de las opciones
+        self.var_ordenar_columna = tk.StringVar(value="Nombre")
         combo_ordenar = ttk.Combobox(marco_ordenar, textvariable=self.var_ordenar_columna, width=15, state="readonly")
-        combo_ordenar['values'] = ["ID", "Nombre", "Precio", "Stock"]
+        combo_ordenar['values'] = ["Nombre", "Precio", "Stock"]
         combo_ordenar.pack(side="left", padx=5)
         combo_ordenar.bind("<<ComboboxSelected>>", self.cambiar_ordenamiento)
         
@@ -707,26 +801,21 @@ class AplicacionInventario:
         marco_ext, marco = EstiloUI.crear_marco_con_borde(self.tab_listado, "Listado de Productos")
         marco_ext.pack(fill="both", expand=True, padx=10, pady=10)
         
-        # Create table
-        columnas = ("id", "nombre", "descripcion", "precio", "stock")
+        # Create table - Eliminada la columna ID
+        columnas = ("nombre", "descripcion", "precio", "stock")
         self.tabla_productos = ttk.Treeview(marco, columns=columnas, show="headings")
         
         # Configure headers
-        self.tabla_productos.heading("id", text="ID")
         self.tabla_productos.heading("nombre", text="Nombre")
         self.tabla_productos.heading("descripcion", text="Descripción")
         self.tabla_productos.heading("precio", text="Precio")
         self.tabla_productos.heading("stock", text="Stock")
         
         # Configure columns
-        self.tabla_productos.column("id", width=50, anchor="center")
         self.tabla_productos.column("nombre", width=150)
         self.tabla_productos.column("descripcion", width=300)
         self.tabla_productos.column("precio", width=100, anchor="e")
         self.tabla_productos.column("stock", width=80, anchor="center")
-        
-        # Scrollbar
-        #scrollbar = ttk.Scrollbar(marco, orient="  anchor="center")
         
         # Scrollbar
         scrollbar = ttk.Scrollbar(marco, orient="vertical", command=self.tabla_productos.yview)
@@ -790,7 +879,7 @@ class AplicacionInventario:
         marco_ext.pack(fill="both", expand=True, padx=10, pady=10)
         
         # Variables for the form
-        self.var_id = tk.StringVar()
+        self.var_id = tk.StringVar()  # Mantenemos esta variable para uso interno
         self.var_nombre = tk.StringVar()
         self.var_descripcion = tk.StringVar()
         self.var_precio = tk.StringVar()
@@ -799,15 +888,7 @@ class AplicacionInventario:
         self.var_tipo_ajuste = tk.StringVar(value="agregar")
         
         # Create form
-        # ID (only for editing)
-        frame_id = ttk.Frame(marco, style="TFrame")
-        frame_id.pack(fill="x", padx=20, pady=5)
-        
-        lbl_id = ttk.Label(frame_id, text="ID:", width=15, anchor="e", style="TLabel")
-        lbl_id.pack(side="left", padx=(0, 5))
-        
-        entry_id = ttk.Entry(frame_id, textvariable=self.var_id, state="readonly", width=10)
-        entry_id.pack(side="left")
+        # Eliminado el campo ID visible
         
         # Name
         frame_nombre = ttk.Frame(marco, style="TFrame")
@@ -913,7 +994,7 @@ class AplicacionInventario:
         self.var_precio_max = tk.StringVar()
         self.var_stock_min = tk.StringVar()
         self.var_stock_max = tk.StringVar()
-        self.var_busqueda_orden = tk.StringVar(value="id")
+        self.var_busqueda_orden = tk.StringVar(value="nombre")  # Cambiado: Default ahora es nombre
         self.var_busqueda_direccion = tk.BooleanVar(value=True)
         
         # Search text
@@ -926,7 +1007,7 @@ class AplicacionInventario:
         entry_texto = ttk.Entry(frame_texto, textvariable=self.var_busqueda_texto, width=40)
         entry_texto.pack(side="left")
         
-        ToolTip(entry_texto, "Buscar por ID, nombre o descripción")
+        ToolTip(entry_texto, "Buscar por nombre o descripción")  # Actualizado: Eliminada referencia a ID
         
         # Price range
         frame_precio = ttk.Frame(marco, style="TFrame")
@@ -966,7 +1047,7 @@ class AplicacionInventario:
         ToolTip(entry_stock_min, "Stock mínimo (dejar vacío para no establecer límite)")
         ToolTip(entry_stock_max, "Stock máximo (dejar vacío para no establecer límite)")
         
-        # Sort options
+        # Sort options - Eliminado ID de las opciones
         frame_orden = ttk.Frame(marco, style="TFrame")
         frame_orden.pack(fill="x", padx=20, pady=5)
         
@@ -974,7 +1055,7 @@ class AplicacionInventario:
         lbl_orden.pack(side="left", padx=(0, 5))
         
         combo_orden = ttk.Combobox(frame_orden, textvariable=self.var_busqueda_orden, width=15)
-        combo_orden['values'] = ["id", "nombre", "precio", "stock"]
+        combo_orden['values'] = ["nombre", "precio", "cantidad_stock"]
         combo_orden['state'] = 'readonly'
         combo_orden.pack(side="left", padx=5)
         
@@ -1006,19 +1087,17 @@ class AplicacionInventario:
         marco_ext_res, marco_res = EstiloUI.crear_marco_con_borde(self.tab_busqueda, "Resultados de Búsqueda")
         marco_ext_res.pack(fill="both", expand=True, padx=10, pady=10)
         
-        # Create results table
-        columnas = ("id", "nombre", "descripcion", "precio", "stock")
+        # Create results table - Eliminada la columna ID
+        columnas = ("nombre", "descripcion", "precio", "stock")
         self.tabla_resultados = ttk.Treeview(marco_res, columns=columnas, show="headings")
         
         # Configure headers
-        self.tabla_resultados.heading("id", text="ID")
         self.tabla_resultados.heading("nombre", text="Nombre")
         self.tabla_resultados.heading("descripcion", text="Descripción")
         self.tabla_resultados.heading("precio", text="Precio")
         self.tabla_resultados.heading("stock", text="Stock")
         
         # Configure columns
-        self.tabla_resultados.column("id", width=50, anchor="center")
         self.tabla_resultados.column("nombre", width=150)
         self.tabla_resultados.column("descripcion", width=300)
         self.tabla_resultados.column("precio", width=100, anchor="e")
@@ -1120,15 +1199,14 @@ class AplicacionInventario:
             ascending=self.sort_ascending
         )
         
-        # Insert into table
+        # Insert into table - Eliminado el ID de los valores mostrados
         for producto in productos:
             self.tabla_productos.insert("", "end", values=(
-                producto.id,
                 producto.nombre,
                 producto.descripcion,
                 f"${producto.precio:.2f}",
                 producto.cantidad_stock
-            ))
+            ), tags=(str(producto.id),))  # Guardamos el ID como tag para referencia interna
         
         # Update status
         self.actualizar_estado(f"Se cargaron {len(productos)} productos.")
@@ -1147,7 +1225,9 @@ class AplicacionInventario:
             self.actualizar_estado(mensaje)
             self.cargar_productos()
         else:
-            messagebox.showerror("Error de Sincronización", mensaje)
+            # Mejorado: Mostrar error detallado
+            MensajeError(self.root, "Error de Sincronización", 
+                        "No se pudo sincronizar con la base de datos.", mensaje)
     
     def limpiar_formulario(self):
         """Clears the product management form."""
@@ -1222,22 +1302,18 @@ class AplicacionInventario:
         
         # Show result
         if exito:
-            self.lbl_estado_form.config(
-                text=mensaje, 
-                foreground=EstiloUI.COLOR_EXITO
-            )
+            # Mejorado: Usar el método de EstiloUI para mostrar mensajes
+            EstiloUI.mostrar_mensaje(self.lbl_estado_form, mensaje, "exito")
             self.cargar_productos()
             if not id_producto:  # If it was a new product, clear the form
                 self.limpiar_formulario()
         else:
-            self.mostrar_error_formulario(mensaje)
+            # Mejorado: Mostrar error detallado
+            EstiloUI.mostrar_mensaje(self.lbl_estado_form, mensaje, "error")
     
     def mostrar_error_formulario(self, mensaje):
         """Shows an error message in the form."""
-        self.lbl_estado_form.config(
-            text=mensaje, 
-            foreground=EstiloUI.COLOR_ERROR
-        )
+        EstiloUI.mostrar_mensaje(self.lbl_estado_form, mensaje, "error")
     
     def editar_producto_seleccionado(self):
         """Loads data from the selected product into the form."""
@@ -1250,12 +1326,19 @@ class AplicacionInventario:
         item = self.tabla_productos.item(seleccion[0])
         valores = item["values"]
         
+        # Obtener el ID del producto desde los tags
+        id_producto = item["tags"][0] if item["tags"] else None
+        
+        if not id_producto:
+            messagebox.showerror("Error", "No se pudo identificar el producto seleccionado.")
+            return
+        
         # Load data into form
-        self.var_id.set(valores[0])
-        self.var_nombre.set(valores[1])
-        self.var_descripcion.set(valores[2])
-        self.var_precio.set(valores[3].replace("$", ""))
-        self.var_stock.set(valores[4])
+        self.var_id.set(id_producto)  # Guardamos el ID internamente
+        self.var_nombre.set(valores[0])  # Nombre ahora es el primer valor
+        self.var_descripcion.set(valores[1])  # Descripción ahora es el segundo valor
+        self.var_precio.set(valores[2].replace("$", ""))  # Precio ahora es el tercer valor
+        self.var_stock.set(valores[3])  # Stock ahora es el cuarto valor
         self.var_ajuste_stock.set("")  # Clear adjustment field
         
         # Switch to management tab
@@ -1271,8 +1354,12 @@ class AplicacionInventario:
         # Get data from selected product
         item = self.tabla_productos.item(seleccion[0])
         valores = item["values"]
-        id_producto = valores[0]
-        nombre_producto = valores[1]
+        id_producto = item["tags"][0] if item["tags"] else None
+        nombre_producto = valores[0]  # Nombre ahora es el primer valor
+        
+        if not id_producto:
+            messagebox.showerror("Error", "No se pudo identificar el producto seleccionado.")
+            return
         
         # Confirm deletion
         if not messagebox.askyesno("Confirmar Eliminación", 
@@ -1280,14 +1367,16 @@ class AplicacionInventario:
             return
         
         # Delete product
-        exito, mensaje = self.sistema.eliminar_producto(id_producto)
+        exito, mensaje = self.sistema.eliminar_producto(int(id_producto))
         
         # Show result
         if exito:
             self.actualizar_estado(mensaje)
             self.cargar_productos()
         else:
-            messagebox.showerror("Error", mensaje)
+            # Mejorado: Mostrar error detallado
+            MensajeError(self.root, "Error al Eliminar", 
+                        "No se pudo eliminar el producto.", mensaje)
     
     def limpiar_busqueda(self):
         """Clears search criteria."""
@@ -1296,7 +1385,7 @@ class AplicacionInventario:
         self.var_precio_max.set("")
         self.var_stock_min.set("")
         self.var_stock_max.set("")
-        self.var_busqueda_orden.set("id")
+        self.var_busqueda_orden.set("nombre")  # Cambiado: Default ahora es nombre
         self.var_busqueda_direccion.set(True)
         
         # Clear results
@@ -1330,16 +1419,25 @@ class AplicacionInventario:
             if stock_max_str:
                 stock_max = int(stock_max_str)
         except ValueError:
-            messagebox.showerror("Error", "Los valores numéricos ingresados no son válidos.")
+            # Mejorado: Mostrar error detallado
+            MensajeError(self.root, "Error de Validación", 
+                        "Los valores numéricos ingresados no son válidos.",
+                        "Asegúrese de ingresar números válidos para los rangos de precio y stock.")
             return
         
         # Validate ranges
         if precio_min is not None and precio_max is not None and precio_min > precio_max:
-            messagebox.showerror("Error", "El precio mínimo no puede ser mayor que el precio máximo.")
+            # Mejorado: Mostrar error detallado
+            MensajeError(self.root, "Error de Validación", 
+                        "El precio mínimo no puede ser mayor que el precio máximo.",
+                        "Por favor, corrija el rango de precios.")
             return
         
         if stock_min is not None and stock_max is not None and stock_min > stock_max:
-            messagebox.showerror("Error", "El stock mínimo no puede ser mayor que el stock máximo.")
+            # Mejorado: Mostrar error detallado
+            MensajeError(self.root, "Error de Validación", 
+                        "El stock mínimo no puede ser mayor que el stock máximo.",
+                        "Por favor, corrija el rango de stock.")
             return
         
         # Perform search
@@ -1357,15 +1455,14 @@ class AplicacionInventario:
         for item in self.tabla_resultados.get_children():
             self.tabla_resultados.delete(item)
         
-        # Show results
+        # Show results - Eliminado el ID de los valores mostrados
         for producto in resultados:
             self.tabla_resultados.insert("", "end", values=(
-                producto.id,
                 producto.nombre,
                 producto.descripcion,
                 f"${producto.precio:.2f}",
                 producto.cantidad_stock
-            ))
+            ), tags=(str(producto.id),))  # Guardamos el ID como tag para referencia interna
         
         # Update status
         self.actualizar_estado(f"Se encontraron {len(resultados)} productos.")
@@ -1381,25 +1478,19 @@ class AplicacionInventario:
         
         # Validate percentage
         if not porcentaje_str:
-            self.lbl_estado_masivo.config(
-                text="Debe ingresar un porcentaje.", 
-                foreground=EstiloUI.COLOR_ERROR
-            )
+            # Mejorado: Usar el método de EstiloUI para mostrar mensajes
+            EstiloUI.mostrar_mensaje(self.lbl_estado_masivo, "Debe ingresar un porcentaje.", "error")
             return
         
         try:
             porcentaje = float(porcentaje_str)
             if porcentaje < -90 or porcentaje > 1000:
-                self.lbl_estado_masivo.config(
-                    text="El porcentaje debe estar entre -90 y 1000.", 
-                    foreground=EstiloUI.COLOR_ERROR
-                )
+                EstiloUI.mostrar_mensaje(self.lbl_estado_masivo, 
+                                        "El porcentaje debe estar entre -90 y 1000.", "error")
                 return
         except ValueError:
-            self.lbl_estado_masivo.config(
-                text="El porcentaje debe ser un número válido.", 
-                foreground=EstiloUI.COLOR_ERROR
-            )
+            EstiloUI.mostrar_mensaje(self.lbl_estado_masivo, 
+                                    "El porcentaje debe ser un número válido.", "error")
             return
         
         # Convert criteria to appropriate types
@@ -1410,10 +1501,8 @@ class AplicacionInventario:
                 precio_min = float(precio_min_str)
                 precio_max = float(precio_max_str)
                 if precio_min > precio_max:
-                    self.lbl_estado_masivo.config(
-                        text="El precio mínimo no puede ser mayor que el precio máximo.", 
-                        foreground=EstiloUI.COLOR_ERROR
-                    )
+                    EstiloUI.mostrar_mensaje(self.lbl_estado_masivo, 
+                                           "El precio mínimo no puede ser mayor que el precio máximo.", "error")
                     return
                 condiciones["precio_min"] = precio_min
                 condiciones["precio_max"] = precio_max
@@ -1422,18 +1511,14 @@ class AplicacionInventario:
                 stock_min = int(stock_min_str)
                 stock_max = int(stock_max_str)
                 if stock_min > stock_max:
-                    self.lbl_estado_masivo.config(
-                        text="El stock mínimo no puede ser mayor que el stock máximo.", 
-                        foreground=EstiloUI.COLOR_ERROR
-                    )
+                    EstiloUI.mostrar_mensaje(self.lbl_estado_masivo, 
+                                           "El stock mínimo no puede ser mayor que el stock máximo.", "error")
                     return
                 condiciones["stock_min"] = stock_min
                 condiciones["stock_max"] = stock_max
         except ValueError:
-            self.lbl_estado_masivo.config(
-                text="Los valores numéricos ingresados no son válidos.", 
-                foreground=EstiloUI.COLOR_ERROR
-            )
+            EstiloUI.mostrar_mensaje(self.lbl_estado_masivo, 
+                                    "Los valores numéricos ingresados no son válidos.", "error")
             return
         
         # Confirm operation
@@ -1448,16 +1533,10 @@ class AplicacionInventario:
         
         # Show result
         if exito:
-            self.lbl_estado_masivo.config(
-                text=mensaje, 
-                foreground=EstiloUI.COLOR_EXITO
-            )
+            EstiloUI.mostrar_mensaje(self.lbl_estado_masivo, mensaje, "exito")
             self.cargar_productos()
         else:
-            self.lbl_estado_masivo.config(
-                text=mensaje, 
-                foreground=EstiloUI.COLOR_ERROR
-            )
+            EstiloUI.mostrar_mensaje(self.lbl_estado_masivo, mensaje, "error")
     
     def actualizar_estado(self, mensaje):
         """Updates the status bar message."""
@@ -1481,4 +1560,8 @@ if __name__ == "__main__":
         # Start event loop
         root.mainloop()
     except Exception as e:
-        messagebox.showerror("Error Fatal", f"Ha ocurrido un error inesperado: {str(e)}")
+        # Mejorado: Mostrar error detallado
+        messagebox.showerror("Error Fatal", 
+                            f"Ha ocurrido un error inesperado: {str(e)}\n\n"
+                            f"Por favor, contacte al soporte técnico.")
+        print(f"Error fatal: {str(e)}")
