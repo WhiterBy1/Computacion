@@ -1794,57 +1794,65 @@ class App(tk.Tk):
             messagebox.showerror("Error", f"Could not create user: {str(e)}", parent=dialog)
     
     def show_admin_interface(self):
-        """Show admin interface"""
+        """Show admin interface with improved button labeling"""
         # Clear window
         for widget in self.winfo_children():
             widget.destroy()
-        
+
         # Create main frame
         main_frame = ttk.Frame(self)
         main_frame.pack(expand=True, fill="both")
-        
+
         # Create notebook (tabs)
         notebook = ttk.Notebook(main_frame)
-        
+
         # Tabs
         tab_players = ttk.Frame(notebook)
         tab_matches = ttk.Frame(notebook)
         tab_ranking = ttk.Frame(notebook)
         tab_game = ttk.Frame(notebook)
-       
-        
-        
-        
-        notebook.add(tab_players, text="Players")
-        notebook.add(tab_game, text="Play")
-        notebook.add(tab_matches, text="Matches")
-        notebook.add(tab_ranking, text="Rankings")
-        
+
+        notebook.add(tab_players, text="👥 Players")
+        notebook.add(tab_game, text="🎮 Play")
+        notebook.add(tab_matches, text="⚔ Matches")
+        notebook.add(tab_ranking, text="🏆 Rankings")
+
         notebook.pack(expand=True, fill="both", padx=10, pady=10)
-        
-        # Top bar
+
+        # Top bar with improved buttons
         top_frame = ttk.Frame(main_frame)
         top_frame.pack(fill="x", padx=10, pady=5)
-        
+
+        # Left side - user info
+        user_info_frame = ttk.Frame(top_frame)
+        user_info_frame.pack(side="left")
+
         ttk.Label(
-            top_frame, 
-            text=f"Connected as: {self.current_user.username} (Admin)",
+            user_info_frame, 
+            text=f"🔐 Connected as: {self.current_user.username} (Admin)",
             font=("Helvetica", 10, "italic")
         ).pack(side="left")
-        
-        # Sync button
-        ttk.Button(
-            top_frame,
-            text="Update",
+
+        # Right side - action buttons
+        action_buttons_frame = ttk.Frame(top_frame)
+        action_buttons_frame.pack(side="right")
+
+        # Sync all data button (renamed from "Update")
+        sync_btn = ttk.Button(
+            action_buttons_frame,
+            text="🔄 Sync All Data",
             command=self.sync_data
-        ).pack(side="left", padx=20)
-        
-        ttk.Button(
-            top_frame,
-            text="Logout",
+        )
+        sync_btn.pack(side="left", padx=5)
+
+        # Logout button
+        logout_btn = ttk.Button(
+            action_buttons_frame,
+            text="🚪 Logout",
             command=self.logout
-        ).pack(side="right")
-        
+        )
+        logout_btn.pack(side="left", padx=5)
+
         # Fill tabs
         self.fill_game_tab(tab_game)
         self.fill_players_tab(tab_players)
@@ -1852,25 +1860,95 @@ class App(tk.Tk):
         self.fill_ranking_tab(tab_ranking)
     
     def sync_data(self):
-        """Synchronize data with the database"""
+        """Synchronize all data with the database"""
         try:
             # Refresh session
             self.session.expire_all()
-            
-            # Update all open tabs
-            notebook = self.winfo_children()[0].winfo_children()[0]
-            current_tab = notebook.index(notebook.select())
-            
-            if current_tab == 0:  # Players tab
-                self.load_players(self.get_players_tree())
-            elif current_tab == 1:  # Matches tab
-                self.load_matches(self.get_matches_tree())
-            elif current_tab == 2:  # Ranking tab
-                self.update_ranking(self.get_ranking_tree())
-            
-            messagebox.showinfo("Success", "Data updated successfully")
+
+            # Show loading indicator
+            self.show_loading_message("Synchronizing all data...")
+
+            # Update current tab data
+            self.refresh_current_tab_data()
+
+            # Hide loading and show success
+            self.hide_loading_message()
+            messagebox.showinfo("Success", "All data synchronized successfully")
+
         except Exception as e:
-            messagebox.showerror("Error", f"Could not update data: {str(e)}")
+            self.hide_loading_message()
+            messagebox.showerror("Error", f"Could not synchronize data: {str(e)}")
+    
+    def show_loading_message(self, message):
+        """Show a loading message"""
+        # You can implement a proper loading spinner here
+        # For now, we'll just update the window title
+        original_title = self.title()
+        self.title(f"{original_title} - {message}")
+        self.update()
+
+    def hide_loading_message(self):
+        """Hide loading message"""
+        # Restore original title
+        if " - " in self.title():
+            original_title = self.title().split(" - ")[0]
+            self.title(original_title)
+    
+    def refresh_current_tab_data(self):
+        """Refresh data for the currently active tab"""
+        try:
+            # Find the active notebook and tab
+            main_frame = self.winfo_children()[0]
+            if not main_frame.winfo_children():
+                return
+
+            notebook = main_frame.winfo_children()[0]
+            if not hasattr(notebook, 'index') or not hasattr(notebook, 'select'):
+                return
+
+            current_tab_index = notebook.index(notebook.select())
+
+            if self.is_admin:
+                # Admin interface tabs: Players, Play, Matches, Rankings
+                if current_tab_index == 0:  # Players
+                    tree = self.find_widget_by_type(notebook, 'Treeview', 'players')
+                    if tree:
+                        self.load_players(tree)
+                elif current_tab_index == 2:  # Matches  
+                    tree = self.find_widget_by_type(notebook, 'Treeview', 'matches')
+                    if tree:
+                        self.load_matches(tree)
+                elif current_tab_index == 3:  # Rankings
+                    tree = self.find_widget_by_type(notebook, 'Treeview', 'ranking')
+                    if tree:
+                        self.update_ranking(tree)
+            else:
+                # Player interface tabs: My Profile, My Matches, Ranking, Play
+                if current_tab_index == 1:  # My Matches
+                    tree = self.find_widget_by_type(notebook, 'Treeview', 'player_matches')
+                    if tree:
+                        self.load_player_matches(tree)
+                elif current_tab_index == 2:  # Ranking
+                    tree = self.find_widget_by_type(notebook, 'Treeview', 'player_ranking')
+                    if tree:
+                        self.update_player_ranking(tree)
+
+        except Exception as e:
+            print(f"Error refreshing current tab: {e}")
+    
+    def find_widget_by_type(self, parent, widget_type, context=None):
+        """Find widget by type in the widget tree"""
+        try:
+            if parent.winfo_class() == widget_type:
+                return parent
+
+            for child in parent.winfo_children():
+                result = self.find_widget_by_type(child, widget_type, context)
+                if result:
+                    return result
+        except:
+            pass
+        return None
     
     def get_players_tree(self):
         """Get the players treeview from the current interface"""
@@ -1932,36 +2010,43 @@ class App(tk.Tk):
         ).pack(pady=20)
     
     def fill_players_tab(self, tab):
-        """Fill players tab"""
+        """Fill players tab with improved UI"""
         # Top frame with controls
         control_frame = ttk.Frame(tab)
         control_frame.pack(fill="x", padx=10, pady=10)
-        
-        # Search
-        ttk.Label(control_frame, text="Search:").pack(side="left", padx=(0, 5))
+
+        # Search controls
+        search_frame = ttk.Frame(control_frame)
+        search_frame.pack(side="left", fill="x", expand=True)
+
+        ttk.Label(search_frame, text="Search:").pack(side="left", padx=(0, 5))
         search_var = tk.StringVar()
-        search_entry = ttk.Entry(control_frame, textvariable=search_var, width=30)
+        search_entry = ttk.Entry(search_frame, textvariable=search_var, width=30)
         search_entry.pack(side="left", padx=5)
-        
+
         # Server filter
-        ttk.Label(control_frame, text="Server:").pack(side="left", padx=(20, 5))
-        
+        ttk.Label(search_frame, text="Server:").pack(side="left", padx=(20, 5))
+
         servers = self.server_repo.list_all()
         server_names = ["All"] + [f"{s.name} ({s.region})" for s in servers]
         server_ids = [None] + [s.id for s in servers]
-        
+
         server_var = tk.StringVar(value=server_names[0])
-        server_menu = ttk.OptionMenu(control_frame, server_var, *server_names)
+        server_menu = ttk.OptionMenu(search_frame, server_var, *server_names)
         server_menu.pack(side="left", padx=5)
-        
+
         # Create sort manager
         sort_manager = SortManager()
         sort_manager.current_sort_column = "username"
-        
-        # Buttons
-        ttk.Button(
-            control_frame,
-            text="Search",
+
+        # Action buttons frame
+        action_frame = ttk.Frame(control_frame)
+        action_frame.pack(side="right", padx=(20, 0))
+
+        # Search button
+        search_btn = ttk.Button(
+            action_frame,
+            text="🔍 Search",
             command=lambda: self.search_players(
                 search_var.get(),
                 None if server_var.get() == "All" else server_ids[server_names.index(server_var.get())],
@@ -1969,15 +2054,36 @@ class App(tk.Tk):
                 sort_manager.current_sort_direction,
                 players_tree
             )
-        ).pack(side="left", padx=20)
-        
+        )
+        search_btn.pack(side="left", padx=5)
+
+        # Refresh table button
+        refresh_btn = ttk.Button(
+            action_frame,
+            text="🔄 Refresh Table",
+            command=lambda: self.load_players(
+                players_tree, 
+                sort_manager.current_sort_column,
+                sort_manager.current_sort_direction
+            )
+        )
+        refresh_btn.pack(side="left", padx=5)
+
+        # Create player button
+        create_btn = ttk.Button(
+            action_frame,
+            text="➕ Create Player",
+            command=self.create_player_dialog
+        )
+        create_btn.pack(side="left", padx=5)
+
         # Pagination controls
         pagination_frame = ttk.Frame(control_frame)
-        pagination_frame.pack(side="left", padx=20)
-        
+        pagination_frame.pack(side="bottom", pady=(10, 0))
+
         self.prev_page_btn = ttk.Button(
             pagination_frame,
-            text="Previous",
+            text="◀ Previous",
             command=lambda: self.change_page(-1, lambda: self.load_players(
                 players_tree, 
                 sort_manager.current_sort_column,
@@ -1985,13 +2091,13 @@ class App(tk.Tk):
             ))
         )
         self.prev_page_btn.pack(side="left", padx=5)
-        
+
         self.page_label = ttk.Label(pagination_frame, text=f"Page {self.current_page}")
-        self.page_label.pack(side="left", padx=5)
-        
+        self.page_label.pack(side="left", padx=15)
+
         self.next_page_btn = ttk.Button(
             pagination_frame,
-            text="Next",
+            text="Next ▶",
             command=lambda: self.change_page(1, lambda: self.load_players(
                 players_tree,
                 sort_manager.current_sort_column,
@@ -1999,29 +2105,23 @@ class App(tk.Tk):
             ))
         )
         self.next_page_btn.pack(side="left", padx=5)
-        
-        ttk.Button(
-            control_frame,
-            text="Create Player",
-            command=self.create_player_dialog
-        ).pack(side="right", padx=5)
-        
+
         # Create a frame with scrollbar for the table
         table_container = ttk.Frame(tab)
         table_container.pack(expand=True, fill="both", padx=10, pady=10)
-        
+
         # Players table
         players_tree = ttk.Treeview(
             table_container,
             columns=("id", "username", "level", "server", "games", "mmr", "rank", "win_ratio"),
             show="headings"
         )
-        
+
         # Configure columns with sorting
         def setup_column_sort(column, text, width, anchor="w"):
             players_tree.heading(column, text=text, command=lambda: self.sort_treeview(players_tree, column, sort_manager))
             players_tree.column(column, width=width, anchor=anchor)
-        
+
         setup_column_sort("id", "ID", 50, "center")
         setup_column_sort("username", "Username", 150)
         setup_column_sort("level", "Level", 50, "center")
@@ -2030,32 +2130,32 @@ class App(tk.Tk):
         setup_column_sort("mmr", "MMR", 70, "center")
         setup_column_sort("rank", "Rank", 100)
         setup_column_sort("win_ratio", "Win Ratio", 70, "center")
-        
+
         # Scrollbars
         y_scrollbar = ttk.Scrollbar(table_container, orient="vertical", command=players_tree.yview)
         x_scrollbar = ttk.Scrollbar(table_container, orient="horizontal", command=players_tree.xview)
         players_tree.configure(yscrollcommand=y_scrollbar.set, xscrollcommand=x_scrollbar.set)
-        
+
         # Pack everything
         y_scrollbar.pack(side="right", fill="y")
         x_scrollbar.pack(side="bottom", fill="x")
         players_tree.pack(side="left", expand=True, fill="both")
-        
+
         # Context menu
         def show_context_menu(event):
             item = players_tree.identify_row(event.y)
             if item:
                 players_tree.selection_set(item)
                 context_menu.post(event.x_root, event.y_root)
-        
+
         context_menu = tk.Menu(players_tree, tearoff=0)
-        context_menu.add_command(label="View Details", command=lambda: self.view_player_details(players_tree))
-        context_menu.add_command(label="Edit", command=lambda: self.edit_player_dialog(players_tree))
+        context_menu.add_command(label="👁 View Details", command=lambda: self.view_player_details(players_tree))
+        context_menu.add_command(label="✏ Edit", command=lambda: self.edit_player_dialog(players_tree))
         context_menu.add_separator()
-        context_menu.add_command(label="Delete", command=lambda: self.delete_player(players_tree))
-        
+        context_menu.add_command(label="🗑 Delete", command=lambda: self.delete_player(players_tree))
+
         players_tree.bind("<Button-3>", show_context_menu)
-        
+
         # Load initial data
         self.load_players(players_tree, "username", "asc")
 
@@ -2087,105 +2187,132 @@ class App(tk.Tk):
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo iniciar el juego: {str(e)}")
     def change_page(self, delta, callback):
-        """Change current page and refresh data"""
-        new_page = self.current_page + delta
-        if new_page < 1:
-            messagebox.showinfo("Information", "You are already on the first page")
-            return
-        
-        self.current_page = new_page
-        
-        # Update all page labels safely
+        """Change current page with improved validation and refresh"""
         try:
-            if hasattr(self, 'page_label') and self.page_label.winfo_exists():
-                self.page_label.config(text=f"Page {self.current_page}")
-            if hasattr(self, 'matches_page_label') and self.matches_page_label.winfo_exists():
-                self.matches_page_label.config(text=f"Page {self.current_page}")
-            if hasattr(self, 'ranking_page_label') and self.ranking_page_label.winfo_exists():
-                self.ranking_page_label.config(text=f"Page {self.current_page}")
-            if hasattr(self, 'player_matches_page_label') and self.player_matches_page_label.winfo_exists():
-                self.player_matches_page_label.config(text=f"Page {self.current_page}")
-            if hasattr(self, 'player_ranking_page_label') and self.player_ranking_page_label.winfo_exists():
-                self.player_ranking_page_label.config(text=f"Page {self.current_page}")
-        except tk.TclError:
-            # Widget was destroyed, ignore
-            pass
-        
-        # Call the callback to refresh data
-        try:
-            callback()
+            # Calculate new page
+            new_page = max(1, self.current_page + delta)
+
+            # Validate if the new page has data
+            has_data = self.validate_page_has_data(new_page)
+
+            if delta > 0 and not has_data:
+                messagebox.showinfo("Information", "No more pages available")
+                return
+
+            if delta < 0 and new_page < 1:
+                messagebox.showinfo("Information", "You are already on the first page")
+                return
+
+            # Update page
+            old_page = self.current_page
+            self.current_page = new_page
+
+            # Update all page labels safely
+            self.update_all_page_labels()
+
+            # Try to refresh data
+            try:
+                callback()
+                # If successful, update pagination buttons
+                self.update_pagination_buttons()
+            except Exception as e:
+                # If refresh fails, rollback page change
+                self.current_page = old_page
+                self.update_all_page_labels()
+                messagebox.showerror("Error", f"Could not load page data: {str(e)}")
+
         except Exception as e:
-            print(f"Error in callback: {e}")
+            print(f"Error in change_page: {e}")
+            
+    
+    def validate_page_has_data(self, page_num):
+        """Validate if a page has data before navigating to it"""
+        try:
+            if self.is_admin:
+                notebook = self.winfo_children()[0].winfo_children()[0]
+                current_tab = notebook.index(notebook.select())
+
+                if current_tab == 0:  # Players tab
+                    players, total = self.player_repo.list_all(page=page_num, per_page=self.items_per_page)
+                    return len(players) > 0
+                elif current_tab == 2:  # Matches tab
+                    matches, total = self.match_repo.list_all(page=page_num, per_page=self.items_per_page)
+                    return len(matches) > 0
+                elif current_tab == 3:  # Rankings tab
+                    ranking, total = self.ranking_service.get_global_ranking(page=page_num, per_page=self.items_per_page)
+                    return len(ranking) > 0
+            else:
+                notebook = self.winfo_children()[0].winfo_children()[0]
+                current_tab = notebook.index(notebook.select())
+
+                if current_tab == 1:  # My Matches tab
+                    matches, total = self.match_repo.list_by_player(self.current_user.id, page=page_num, per_page=self.items_per_page)
+                    return len(matches) > 0
+                elif current_tab == 2:  # Ranking tab
+                    ranking, total = self.ranking_service.get_global_ranking(page=page_num, per_page=self.items_per_page)
+                    return len(ranking) > 0
+
+            return True  # Default to true for safety
+
+        except Exception:
+            return True  # Default to true if we can't validate
+    
+    def update_all_page_labels(self):
+        """Update all page labels safely"""
+        try:
+            page_text = f"Page {self.current_page}"
+
+            # Update all possible page labels
+            labels_to_update = [
+                'page_label', 'matches_page_label', 'ranking_page_label',
+                'player_matches_page_label', 'player_ranking_page_label'
+            ]
+
+            for label_name in labels_to_update:
+                if hasattr(self, label_name):
+                    label = getattr(self, label_name)
+                    if label and label.winfo_exists():
+                        label.config(text=page_text)
+
+        except Exception as e:
+            print(f"Error updating page labels: {e}")
+
+
     
     def update_pagination_buttons(self):
-        """Update pagination buttons based on data availability"""
-        # Determine which buttons to update based on the current interface
-        if self.is_admin:
-            # Admin interface
-            notebook = self.winfo_children()[0].winfo_children()[0]
-            current_tab = notebook.index(notebook.select())
-        
-            if current_tab == 0:  # Players tab
-                prev_btn = self.prev_page_btn
-                next_btn = self.next_page_btn
-            
-                # Check if there's data for the next page
-                players, total = self.player_repo.list_all(page=self.current_page + 1, per_page=self.items_per_page)
-                has_next_page = len(players) > 0
-            
-            elif current_tab == 1:  # Matches tab
-                prev_btn = self.matches_prev_btn
-                next_btn = self.matches_next_btn
-            
-                # Check if there's data for the next page
-                matches, total = self.match_repo.list_all(page=self.current_page + 1, per_page=self.items_per_page)
-                has_next_page = len(matches) > 0
-            
-            elif current_tab == 2:  # Ranking tab
-                prev_btn = self.ranking_prev_btn
-                next_btn = self.ranking_next_btn
-            
-                # Check if there's data for the next page
-                ranking, total = self.ranking_service.get_global_ranking(page=self.current_page + 1, per_page=self.items_per_page)
-                has_next_page = len(ranking) > 0
-            else:
-                # If we're on a different tab, just return
-                return
-        else:
-            # Player interface
-            notebook = self.winfo_children()[0].winfo_children()[0]
-            current_tab = notebook.index(notebook.select())
-        
-            if current_tab == 1:  # My Matches tab
-                prev_btn = self.player_matches_prev_btn
-                next_btn = self.player_matches_next_btn
-            
-                # Check if there's data for the next page
-                matches, total = self.match_repo.list_by_player(self.current_user.id, page=self.current_page + 1, per_page=self.items_per_page)
-                has_next_page = len(matches) > 0
-            
-            elif current_tab == 2:  # Ranking tab
-                prev_btn = self.player_ranking_prev_btn
-                next_btn = self.player_ranking_next_btn
-            
-                # Check if there's data for the next page
-                ranking, total = self.ranking_service.get_global_ranking(page=self.current_page + 1, per_page=self.items_per_page)
-                has_next_page = len(ranking) > 0
-            else:
-                # If we're on a different tab, just return
-                return
-    
-        # Disable Previous button on first page
-        if self.current_page <= 1:
-            prev_btn.config(state="disabled")
-        else:
-            prev_btn.config(state="normal")
-    
-        # Disable Next button if no more data
-        if not has_next_page:
-            next_btn.config(state="disabled")
-        else:
-            next_btn.config(state="normal")
+        """Update pagination buttons with better validation"""
+        try:
+            # Always enable Previous button if not on first page
+            prev_buttons = ['prev_page_btn', 'matches_prev_btn', 'ranking_prev_btn', 
+                           'player_matches_prev_btn', 'player_ranking_prev_btn']
+
+            next_buttons = ['next_page_btn', 'matches_next_btn', 'ranking_next_btn',
+                           'player_matches_next_btn', 'player_ranking_next_btn']
+
+            # Update Previous buttons
+            for btn_name in prev_buttons:
+                if hasattr(self, btn_name):
+                    btn = getattr(self, btn_name)
+                    if btn and btn.winfo_exists():
+                        if self.current_page <= 1:
+                            btn.config(state="disabled")
+                        else:
+                            btn.config(state="normal")
+
+            # Update Next buttons - check if next page has data
+            has_next_data = self.validate_page_has_data(self.current_page + 1)
+
+            for btn_name in next_buttons:
+                if hasattr(self, btn_name):
+                    btn = getattr(self, btn_name)
+                    if btn and btn.winfo_exists():
+                        if has_next_data:
+                            btn.config(state="normal")
+                        else:
+                            btn.config(state="disabled")
+
+        except Exception as e:
+            print(f"Error updating pagination buttons: {e}")
     
     def load_players(self, tree, sort_by="username", sort_dir="asc"):
         """Load player list into treeview"""
@@ -3795,7 +3922,7 @@ class App(tk.Tk):
         ).pack(pady=10)
     
     def show_player_interface(self):
-        """Show player interface"""
+        """Show player interface with improved button labeling"""
         # Clear window
         for widget in self.winfo_children():
             widget.destroy()
@@ -3807,41 +3934,52 @@ class App(tk.Tk):
         # Create notebook (tabs)
         notebook = ttk.Notebook(main_frame)
         
-        # Tabs
+        # Tabs with icons
         tab_profile = ttk.Frame(notebook)
         tab_matches = ttk.Frame(notebook)
         tab_ranking = ttk.Frame(notebook)
         tab_game = ttk.Frame(notebook)
         
-        notebook.add(tab_profile, text="My Profile")
-        notebook.add(tab_matches, text="My Matches")
-        notebook.add(tab_ranking, text="Ranking")
-        notebook.add(tab_game, text="Play")
+        notebook.add(tab_profile, text="👤 My Profile")
+        notebook.add(tab_matches, text="⚔ My Matches")
+        notebook.add(tab_ranking, text="🏆 Ranking")
+        notebook.add(tab_game, text="🎮 Play")
         
         notebook.pack(expand=True, fill="both", padx=10, pady=10)
         
-        # Top bar
+        # Top bar with improved buttons
         top_frame = ttk.Frame(main_frame)
         top_frame.pack(fill="x", padx=10, pady=5)
         
+        # Left side - user info
+        user_info_frame = ttk.Frame(top_frame)
+        user_info_frame.pack(side="left")
+        
         ttk.Label(
-            top_frame, 
-            text=f"Connected as: {self.current_user.username}",
+            user_info_frame, 
+            text=f"👤 Connected as: {self.current_user.username}",
             font=("Helvetica", 10, "italic")
         ).pack(side="left")
         
-        # Update button
-        ttk.Button(
-            top_frame,
-            text="Update",
-            command=self.sync_data
-        ).pack(side="left", padx=20)
+        # Right side - action buttons  
+        action_buttons_frame = ttk.Frame(top_frame)
+        action_buttons_frame.pack(side="right")
         
-        ttk.Button(
-            main_frame,
-            text="Logout",
+        # Refresh data button (renamed from "Update")
+        refresh_btn = ttk.Button(
+            action_buttons_frame,
+            text="🔄 Refresh Data",
+            command=self.sync_data
+        )
+        refresh_btn.pack(side="left", padx=5)
+        
+        # Logout button
+        logout_btn = ttk.Button(
+            action_buttons_frame,
+            text="🚪 Logout",
             command=self.logout
-        ).pack(side="right")
+        )
+        logout_btn.pack(side="left", padx=5)
         
         # Fill tabs
         self.fill_player_game_tab(tab_game)
@@ -3885,122 +4023,176 @@ class App(tk.Tk):
         ).pack(pady=20)
         
     def fill_player_profile_tab(self, tab):
-        """Fill player profile tab"""
+        """Fill player profile tab with improved layout"""
         # Get player data
         player = self.current_user
         stats = player.stats
         ranking = player.rankings
-        
+
         # Main frame
         main_frame = ttk.Frame(tab, padding=20)
         main_frame.pack(expand=True, fill="both")
-        
-        # Basic information
-        info_frame = ttk.Frame(main_frame)
-        info_frame.pack(fill="x", pady=10)
-        
-        ttk.Label(info_frame, text="Profile Information", font=("Helvetica", 16, "bold")).pack(anchor="w")
-        
-        # Basic data
-        data_frame = ttk.Frame(main_frame)
-        data_frame.pack(fill="x", pady=10)
-        
-        ttk.Label(data_frame, text="Username:", anchor="e").grid(row=0, column=0, padx=5, pady=5, sticky="e")
-        ttk.Label(data_frame, text=player.username, font=("Helvetica", 11, "bold")).grid(row=0, column=1, padx=5, pady=5, sticky="w")
-        
-        ttk.Label(data_frame, text="Level:", anchor="e").grid(row=1, column=0, padx=5, pady=5, sticky="e")
-        ttk.Label(data_frame, text=str(player.level)).grid(row=1, column=1, padx=5, pady=5, sticky="w")
-        
-        ttk.Label(data_frame, text="Member since:", anchor="e").grid(row=2, column=0, padx=5, pady=5, sticky="e")
-        ttk.Label(data_frame, text=player.created_at.strftime("%Y-%m-%d")).grid(row=2, column=1, padx=5, pady=5, sticky="w")
-        
-        ttk.Label(data_frame, text="Server:", anchor="e").grid(row=3, column=0, padx=5, pady=5, sticky="e")
-        ttk.Label(data_frame, text=f"{player.server.name} ({player.server.region})" if player.server else "N/A").grid(row=3, column=1, padx=5, pady=5, sticky="w")
-        
-        # Statistics
-        stats_frame = ttk.Frame(main_frame)
-        stats_frame.pack(fill="x", pady=(20, 10))
-        
-        ttk.Label(stats_frame, text="Statistics", font=("Helvetica", 14, "bold")).pack(anchor="w")
-        
-        if stats:
-            stats_data = ttk.Frame(stats_frame)
-            stats_data.pack(fill="x", pady=5)
-            
-            # First row (summary)
-            ttk.Label(stats_data, text="Games played:", anchor="e").grid(row=0, column=0, padx=5, pady=5, sticky="e")
-            ttk.Label(stats_data, text=str(stats.games_played)).grid(row=0, column=1, padx=5, pady=5, sticky="w")
-          
-            ttk.Label(stats_data, text="Wins:", anchor="e").grid(row=0, column=2, padx=(20, 5), pady=5, sticky="e")
-            ttk.Label(stats_data, text=str(stats.games_won)).grid(row=0, column=3, padx=5, pady=5, sticky="w")
-            
-            ttk.Label(stats_data, text="Losses:", anchor="e").grid(row=0, column=4, padx=(20, 5), pady=5, sticky="e")
-            ttk.Label(stats_data, text=str(stats.games_lost)).grid(row=0, column=5, padx=5, pady=5, sticky="w")
-            
-            # Second row
-            ttk.Label(stats_data, text="Win ratio:", anchor="e").grid(row=1, column=0, padx=5, pady=5, sticky="e")
-            ttk.Label(stats_data, text=f"{stats.win_ratio:.2f}").grid(row=1, column=1, padx=5, pady=5, sticky="w")
-            
-            ttk.Label(stats_data, text="Max win streak:", anchor="e").grid(row=1, column=2, padx=(20, 5), pady=5, sticky="e")
-            ttk.Label(stats_data, text=str(stats.max_win_streak)).grid(row=1, column=3, padx=5, pady=5, sticky="w")
-      
-        # Ranking
-        ranking_frame = ttk.Frame(main_frame)
-        ranking_frame.pack(fill="x", pady=(20, 10))
 
-        ttk.Label(ranking_frame, text="Ranking", font=("Helvetica", 14, "bold")).pack(anchor="w")
+        # Create top section with profile info and stats side by side
+        top_section = ttk.Frame(main_frame)
+        top_section.pack(fill="x", pady=(0, 20))
+
+        # LEFT SIDE: Basic information
+        info_frame = ttk.Frame(top_section)
+        info_frame.pack(side="left", fill="both", expand=True, padx=(0, 20))
+
+        ttk.Label(info_frame, text="Profile Information", font=("Helvetica", 16, "bold")).pack(anchor="w", pady=(0, 15))
+
+        # Basic data in a grid
+        data_frame = ttk.Frame(info_frame)
+        data_frame.pack(fill="x")
+
+        # Profile information in two columns for better space usage
+        ttk.Label(data_frame, text="Username:", anchor="e", font=("Helvetica", 10, "bold")).grid(row=0, column=0, padx=(0, 10), pady=5, sticky="e")
+        ttk.Label(data_frame, text=player.username, font=("Helvetica", 11)).grid(row=0, column=1, padx=(0, 30), pady=5, sticky="w")
+
+        ttk.Label(data_frame, text="Level:", anchor="e", font=("Helvetica", 10, "bold")).grid(row=0, column=2, padx=(0, 10), pady=5, sticky="e")
+        ttk.Label(data_frame, text=str(player.level), font=("Helvetica", 11)).grid(row=0, column=3, pady=5, sticky="w")
+
+        ttk.Label(data_frame, text="Member since:", anchor="e", font=("Helvetica", 10, "bold")).grid(row=1, column=0, padx=(0, 10), pady=5, sticky="e")
+        ttk.Label(data_frame, text=player.created_at.strftime("%Y-%m-%d"), font=("Helvetica", 11)).grid(row=1, column=1, padx=(0, 30), pady=5, sticky="w")
+
+        ttk.Label(data_frame, text="Server:", anchor="e", font=("Helvetica", 10, "bold")).grid(row=2, column=0, padx=(0, 10), pady=5, sticky="e")
+        server_text = f"{player.server.name} ({player.server.region})" if player.server else "N/A"
+        ttk.Label(data_frame, text=server_text, font=("Helvetica", 11)).grid(row=2, column=1, columnspan=3, pady=5, sticky="w")
+
+        # RIGHT SIDE: Statistics in a compact card
+        stats_card = ttk.LabelFrame(top_section, text="Statistics", padding=15)
+        stats_card.pack(side="right", padx=(10, 0))
+
+        if stats:
+            # Create a 3x2 grid for stats
+            stats_grid = ttk.Frame(stats_card)
+            stats_grid.pack()
+
+            # Row 1
+            ttk.Label(stats_grid, text="Games:", font=("Helvetica", 9, "bold"), foreground="#555").grid(row=0, column=0, padx=5, pady=2, sticky="w")
+            ttk.Label(stats_grid, text=str(stats.games_played), font=("Helvetica", 12, "bold"), foreground="#2c3e50").grid(row=0, column=1, padx=5, pady=2)
+
+            ttk.Label(stats_grid, text="Wins:", font=("Helvetica", 9, "bold"), foreground="#555").grid(row=0, column=2, padx=5, pady=2, sticky="w")
+            ttk.Label(stats_grid, text=str(stats.games_won), font=("Helvetica", 12, "bold"), foreground="#27ae60").grid(row=0, column=3, padx=5, pady=2)
+
+            # Row 2
+            ttk.Label(stats_grid, text="Losses:", font=("Helvetica", 9, "bold"), foreground="#555").grid(row=1, column=0, padx=5, pady=2, sticky="w")
+            ttk.Label(stats_grid, text=str(stats.games_lost), font=("Helvetica", 12, "bold"), foreground="#e74c3c").grid(row=1, column=1, padx=5, pady=2)
+
+            ttk.Label(stats_grid, text="Draws:", font=("Helvetica", 9, "bold"), foreground="#555").grid(row=1, column=2, padx=5, pady=2, sticky="w")
+            ttk.Label(stats_grid, text=str(stats.games_drawn), font=("Helvetica", 12, "bold"), foreground="#f39c12").grid(row=1, column=3, padx=5, pady=2)
+
+            # Row 3 - Win ratio and streak (centered)
+            separator = ttk.Separator(stats_grid, orient='horizontal')
+            separator.grid(row=2, column=0, columnspan=4, sticky="ew", pady=5)
+
+            ttk.Label(stats_grid, text="Win Ratio:", font=("Helvetica", 9, "bold"), foreground="#555").grid(row=3, column=0, padx=5, pady=2, sticky="w")
+            ttk.Label(stats_grid, text=f"{stats.win_ratio:.2f}", font=("Helvetica", 12, "bold"), foreground="#3498db").grid(row=3, column=1, padx=5, pady=2)
+
+            ttk.Label(stats_grid, text="Max Streak:", font=("Helvetica", 9, "bold"), foreground="#555").grid(row=3, column=2, padx=5, pady=2, sticky="w")
+            ttk.Label(stats_grid, text=str(stats.max_win_streak), font=("Helvetica", 12, "bold"), foreground="#9b59b6").grid(row=3, column=3, padx=5, pady=2)
+        else:
+            ttk.Label(stats_card, text="No statistics available", font=("Helvetica", 10), foreground="#7f8c8d").pack()
+
+        # BOTTOM SECTION: Ranking (full width)
+        ranking_section = ttk.Frame(main_frame)
+        ranking_section.pack(fill="x", pady=(10, 20))
+
+        # Ranking header and info in one row
+        ranking_header = ttk.Frame(ranking_section)
+        ranking_header.pack(fill="x", pady=(0, 10))
+
+        ttk.Label(ranking_header, text="Ranking", font=("Helvetica", 14, "bold")).pack(side="left")
 
         if ranking:
-            ranking_data = ttk.Frame(ranking_frame)
-            ranking_data.pack(fill="x", pady=5)
+            # Ranking info in the same row as header
+            ranking_info = ttk.Frame(ranking_header)
+            ranking_info.pack(side="right")
 
-            ttk.Label(ranking_data, text="MMR:", anchor="e").grid(row=0, column=0, padx=5, pady=5, sticky="e")
-            ttk.Label(ranking_data, text=str(ranking.current_mmr), font=("Helvetica", 12, "bold")).grid(row=0, column=1, padx=5, pady=5, sticky="w")
+            ttk.Label(ranking_info, text="MMR:", font=("Helvetica", 10, "bold"), foreground="#555").pack(side="left", padx=(0, 5))
+            ttk.Label(ranking_info, text=str(ranking.current_mmr), font=("Helvetica", 14, "bold"), foreground="#e74c3c").pack(side="left", padx=(0, 20))
 
-            ttk.Label(ranking_data, text="Rank:", anchor="e").grid(row=0, column=2, padx=(20, 5), pady=5, sticky="e")
-            ttk.Label(ranking_data, text=ranking.rank_label, font=("Helvetica", 12, "bold")).grid(row=0, column=3, padx=5, pady=5, sticky="w")
+            ttk.Label(ranking_info, text="Rank:", font=("Helvetica", 10, "bold"), foreground="#555").pack(side="left", padx=(0, 5))
 
-            # Try to show MMR evolution graph
-            try:
-                dates, mmr = self.mmr_service.get_mmr_graph_data(player.id)
+            # Color code ranks
+            rank_colors = {
+                "Sin Clasificar": "#95a5a6",
+                "Bronce": "#cd7f32",
+                "Plata": "#c0c0c0", 
+                "Oro": "#ffd700",
+                "Platino": "#e5e4e2",
+                "Diamante": "#b9f2ff",
+                "Maestro": "#ff6b6b"
+            }
+            rank_color = rank_colors.get(ranking.rank_label, "#2c3e50")
 
-                if dates and mmr:
-                    graph_frame = ttk.Frame(ranking_frame)
-                    graph_frame.pack(fill="x", pady=10)
+            ttk.Label(ranking_info, text=ranking.rank_label, font=("Helvetica", 14, "bold"), foreground=rank_color).pack(side="left")
 
-                    fig, ax = plt.subplots(figsize=(8, 3))
-                    ax.plot(dates, mmr, marker='o', linestyle='-', color='blue')
-                    ax.set_title("Your MMR Evolution")
-                    ax.set_ylabel('MMR')
-                    ax.grid(True, linestyle='--', alpha=0.7)
+        # MMR Evolution Graph (if data exists)
+        try:
+            dates, mmr = self.mmr_service.get_mmr_graph_data(player.id)
 
-                    # Rotate x-axis labels
-                    plt.xticks(rotation=45)
-                    plt.tight_layout()
+            if dates and mmr and len(dates) > 1:  # Only show if there's meaningful data
+                graph_frame = ttk.LabelFrame(ranking_section, text="MMR Evolution", padding=10)
+                graph_frame.pack(fill="x", pady=(10, 0))
 
-                    # Integrate graph in Tkinter
-                    canvas = FigureCanvasTkAgg(fig, master=graph_frame)
-                    canvas.draw()
-                    canvas.get_tk_widget().pack(fill="both", expand=True)
-            except:
-                # If there's an error with matplotlib, ignore
-                pass
-              
-        # Buttons
+                fig, ax = plt.subplots(figsize=(10, 3))
+                ax.plot(dates, mmr, marker='o', linestyle='-', color='#3498db', linewidth=2, markersize=4)
+                ax.set_ylabel('MMR', fontweight='bold')
+                ax.grid(True, linestyle='--', alpha=0.3)
+                ax.set_facecolor('#f8f9fa')
+
+                # Style improvements
+                ax.spines['top'].set_visible(False)
+                ax.spines['right'].set_visible(False)
+                ax.spines['left'].set_color('#bdc3c7')
+                ax.spines['bottom'].set_color('#bdc3c7')
+
+                # Rotate x-axis labels
+                plt.xticks(rotation=45, fontsize=8)
+                plt.yticks(fontsize=8)
+                plt.tight_layout()
+
+                # Integrate graph in Tkinter
+                canvas = FigureCanvasTkAgg(fig, master=graph_frame)
+                canvas.draw()
+                canvas.get_tk_widget().pack(fill="both", expand=True)
+        except Exception as e:
+            # If there's an error with matplotlib, show a message
+            print(f"Could not load MMR graph: {e}")
+
+        # Action Buttons (horizontal layout)
         buttons_frame = ttk.Frame(main_frame)
-        buttons_frame.pack(fill="x", pady=(30, 10))
+        buttons_frame.pack(fill="x", pady=(20, 0))
 
-        ttk.Button(
-            buttons_frame,
+        # Left side buttons
+        left_buttons = ttk.Frame(buttons_frame)
+        left_buttons.pack(side="left")
+
+        change_pw_btn = ttk.Button(
+            left_buttons,
             text="Change Password",
             command=self.change_password_dialog
-        ).pack(side="left", padx=10)
+        )
+        change_pw_btn.pack(side="left", padx=(0, 10))
 
-        ttk.Button(
-            buttons_frame,
+        mmr_history_btn = ttk.Button(
+            left_buttons,
             text="View MMR History",
             command=lambda: self.view_mmr_history(player.id)
-        ).pack(side="left", padx=10)
+        )
+        mmr_history_btn.pack(side="left", padx=(0, 10))
+
+        # Right side info
+        info_label = ttk.Label(
+            buttons_frame,
+            text=f"Last login: {player.last_login.strftime('%Y-%m-%d %H:%M') if player.last_login else 'First time'}",
+            font=("Helvetica", 9),
+            foreground="#7f8c8d"
+        )
+        info_label.pack(side="right")
     
     
     def start_player_game(self):
