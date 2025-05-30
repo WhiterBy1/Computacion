@@ -1,6 +1,6 @@
 # =============================================================================
-# ACCESSIBILITY MANAGER V2.0 - CON SOPORTE COMPLETO PARA TABS
-# Solución específica para pestañas de ttk.Notebook y botones problemáticos
+# ACCESSIBILITY MANAGER - VERSIÓN FINAL CORREGIDA
+# Soluciona: recursión infinita + preservación de colores de figuras
 # =============================================================================
 
 import tkinter as tk
@@ -9,7 +9,7 @@ import time
 
 class AccessibilityManager:
     """
-    Gestor de accesibilidad mejorado con soporte completo para tabs y botones
+    Gestor de accesibilidad con navegación segura sin recursión infinita
     """
     
     def __init__(self, root_window):
@@ -32,32 +32,39 @@ class AccessibilityManager:
         # Cache de notebooks encontrados
         self.notebooks = []
         
+        # Control de recursión
+        self._navigation_in_progress = False
+        self._max_navigation_attempts = 10
+        
         # Configurar automáticamente
         self.setup_global_keyboard_navigation()
         
     def setup_global_keyboard_navigation(self):
         """Configurar navegación por teclado global"""
         
-        # Atajos globales principales
-        self.root.bind_all("<Tab>", self._handle_tab)
-        self.root.bind_all("<Shift-Tab>", self._handle_shift_tab)
-        self.root.bind_all("<Return>", self._handle_enter)
-        self.root.bind_all("<space>", self._handle_space)
-        self.root.bind_all("<Escape>", self._handle_escape)
+        # Atajos globales principales - USAR BIND EN LA VENTANA ESPECÍFICA
+        self.root.bind("<Tab>", self._handle_tab)
+        self.root.bind("<Shift-Tab>", self._handle_shift_tab)
+        self.root.bind("<Return>", self._handle_enter)
+        self.root.bind("<space>", self._handle_space)
+        self.root.bind("<Escape>", self._handle_escape)
         
         # Navegación específica para tabs
-        self.root.bind_all("<Control-Tab>", self._handle_next_tab)
-        self.root.bind_all("<Control-Shift-Tab>", self._handle_previous_tab)
-        self.root.bind_all("<Control-1>", lambda e: self._select_tab(0))
-        self.root.bind_all("<Control-2>", lambda e: self._select_tab(1))
-        self.root.bind_all("<Control-3>", lambda e: self._select_tab(2))
-        self.root.bind_all("<Control-4>", lambda e: self._select_tab(3))
-        self.root.bind_all("<Control-5>", lambda e: self._select_tab(4))
+        self.root.bind("<Control-Tab>", self._handle_next_tab)
+        self.root.bind("<Control-Shift-Tab>", self._handle_previous_tab)
+        self.root.bind("<Control-1>", lambda e: self._select_tab(0))
+        self.root.bind("<Control-2>", lambda e: self._select_tab(1))
+        self.root.bind("<Control-3>", lambda e: self._select_tab(2))
+        self.root.bind("<Control-4>", lambda e: self._select_tab(3))
+        self.root.bind("<Control-5>", lambda e: self._select_tab(4))
         
         # Atajos de aplicación
-        self.root.bind_all("<F1>", self._show_help)
-        self.root.bind_all("<Control-q>", self._handle_quit)
-        self.root.bind_all("<Control-r>", self._handle_refresh)
+        self.root.bind("<F1>", self._show_help)
+        self.root.bind("<Control-q>", self._handle_quit)
+        self.root.bind("<Control-r>", self._handle_refresh)
+        
+        # Hacer que la ventana tenga foco cuando se cree
+        self.root.focus_force()
         
         # Auto-descubrir widgets focusables
         self.root.after(500, self._auto_discover_widgets)
@@ -71,13 +78,8 @@ class AccessibilityManager:
         self._find_notebooks(self.root)
         
         for notebook in self.notebooks:
-            # Configurar eventos específicos del notebook
             notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
-            
-            # Hacer el notebook focusable
             notebook.focus_set()
-            
-            # Configurar eventos de teclado específicos
             notebook.bind("<Left>", self._notebook_previous_tab)
             notebook.bind("<Right>", self._notebook_next_tab)
             notebook.bind("<Return>", self._notebook_activate_tab)
@@ -87,7 +89,6 @@ class AccessibilityManager:
         """Encontrar todos los notebooks recursivamente"""
         if isinstance(widget, ttk.Notebook):
             self.notebooks.append(widget)
-            # Hacer el notebook focusable y registrarlo
             self.register_focusable_widget(widget)
         
         try:
@@ -117,7 +118,6 @@ class AccessibilityManager:
     def _notebook_activate_tab(self, event):
         """Activar la pestaña actual del notebook"""
         notebook = event.widget
-        # Enfocar el primer widget dentro de la pestaña activa
         current_tab = notebook.nametowidget(notebook.select())
         self._focus_first_widget_in_tab(current_tab)
         return "break"
@@ -170,7 +170,7 @@ class AccessibilityManager:
         return "break"
     
     def _select_tab(self, tab_index):
-        """Seleccionar pestaña por índice (Ctrl+1, Ctrl+2, etc.)"""
+        """Seleccionar pestaña por índice"""
         current_notebook = self._find_current_notebook()
         if current_notebook and tab_index < len(current_notebook.tabs()):
             current_notebook.select(tab_index)
@@ -189,8 +189,6 @@ class AccessibilityManager:
     
     def _on_tab_changed(self, event):
         """Callback cuando cambia la pestaña"""
-        notebook = event.widget
-        # Refrescar widgets cuando cambia la pestaña
         self.root.after(100, self._refresh_current_tab_widgets)
     
     def _refresh_current_tab_widgets(self):
@@ -199,19 +197,32 @@ class AccessibilityManager:
     
     def _handle_tab(self, event):
         """Manejar Tab - siguiente widget"""
-        # Si estamos en un notebook, usar navegación especial
-        if self._is_focus_in_notebook():
-            self._focus_next_widget_in_current_tab()
-        else:
-            self._focus_next_widget()
+        if self._navigation_in_progress:
+            return "break"
+        
+        try:
+            self._navigation_in_progress = True
+            if self._is_focus_in_notebook():
+                self._focus_next_widget_in_current_tab()
+            else:
+                self._focus_next_widget_safe()
+        finally:
+            self._navigation_in_progress = False
         return "break"
     
     def _handle_shift_tab(self, event):
         """Manejar Shift+Tab - widget anterior"""
-        if self._is_focus_in_notebook():
-            self._focus_previous_widget_in_current_tab()
-        else:
-            self._focus_previous_widget()
+        if self._navigation_in_progress:
+            return "break"
+        
+        try:
+            self._navigation_in_progress = True
+            if self._is_focus_in_notebook():
+                self._focus_previous_widget_in_current_tab()
+            else:
+                self._focus_previous_widget_safe()
+        finally:
+            self._navigation_in_progress = False
         return "break"
     
     def _is_focus_in_notebook(self):
@@ -247,7 +258,7 @@ class AccessibilityManager:
         """Enfocar siguiente widget en la pestaña actual"""
         current_notebook = self._find_current_notebook()
         if not current_notebook:
-            self._focus_next_widget()
+            self._focus_next_widget_safe()
             return
         
         current_tab = current_notebook.nametowidget(current_notebook.select())
@@ -269,7 +280,7 @@ class AccessibilityManager:
         """Enfocar widget anterior en la pestaña actual"""
         current_notebook = self._find_current_notebook()
         if not current_notebook:
-            self._focus_previous_widget()
+            self._focus_previous_widget_safe()
             return
         
         current_tab = current_notebook.nametowidget(current_notebook.select())
@@ -292,12 +303,10 @@ class AccessibilityManager:
         current_widget = self.root.focus_get()
         
         if current_widget:
-            # Casos especiales
             if isinstance(current_widget, ttk.Notebook):
                 self._notebook_activate_tab(type('Event', (), {'widget': current_widget})())
                 return "break"
             
-            # Para botones y widgets activables
             self._activate_widget_enhanced(current_widget)
         return "break"
     
@@ -311,30 +320,25 @@ class AccessibilityManager:
     def _activate_widget_enhanced(self, widget):
         """Activar widget con detección mejorada"""
         try:
-            # Intentar invoke primero
             if hasattr(widget, 'invoke'):
                 widget.invoke()
                 return
             
-            # Para botones que no tienen invoke, simular click
             if isinstance(widget, (tk.Button, ttk.Button)):
                 widget.event_generate("<Button-1>")
                 widget.event_generate("<ButtonRelease-1>")
                 return
             
-            # Para Entry, simplemente darle foco
             if isinstance(widget, (tk.Entry, ttk.Entry)):
                 widget.focus_set()
                 return
             
-            # Para Treeview, generar evento de selección
             if isinstance(widget, ttk.Treeview):
                 selection = widget.selection()
                 if selection:
                     widget.event_generate("<<TreeviewSelect>>")
                 return
             
-            # Para Combobox, expandir lista
             if isinstance(widget, ttk.Combobox):
                 widget.event_generate("<Button-1>")
                 return
@@ -364,22 +368,21 @@ class AccessibilityManager:
         return "break"
     
     def _show_help(self, event):
-        """Mostrar ayuda de teclado mejorada"""
-        self.show_keyboard_help_enhanced()
+        """Mostrar ayuda de teclado"""
+        self.show_keyboard_help()
         return "break"
     
-    def show_keyboard_help_enhanced(self):
-        """Mostrar ventana de ayuda mejorada con soporte para tabs"""
+    def show_keyboard_help(self):
+        """Mostrar ventana de ayuda con atajos"""
         help_window = tk.Toplevel(self.root)
-        help_window.title("Atajos de Teclado - Guía Completa")
-        help_window.geometry("700x600")
+        help_window.title("Atajos de Teclado - Ayuda")
+        help_window.geometry("650x500")
         help_window.transient(self.root)
         help_window.grab_set()
         help_window.focus_set()
         
-        # Contenido de ayuda mejorado
         help_text = """
-🎮 GUÍA COMPLETA DE ATAJOS DE TECLADO
+🎮 GUÍA DE ATAJOS DE TECLADO
 
 📋 NAVEGACIÓN BÁSICA:
 • Tab                     → Siguiente control
@@ -390,54 +393,35 @@ class AccessibilityManager:
 🗂️ NAVEGACIÓN EN PESTAÑAS:
 • Ctrl + Tab              → Siguiente pestaña
 • Ctrl + Shift + Tab      → Pestaña anterior
-• Ctrl + 1,2,3,4,5        → Ir directamente a pestaña (1-5)
+• Ctrl + 1,2,3,4,5        → Ir directamente a pestaña
 • Flechas ←→ (en pestaña) → Cambiar pestaña
-• Enter (en pestaña)      → Entrar al contenido de la pestaña
+• Enter (en pestaña)      → Entrar al contenido
 
 🔧 ATAJOS GLOBALES:
 • F1                      → Mostrar esta ayuda
 • Ctrl + Q                → Salir de la aplicación
-• Ctrl + R                → Actualizar/Refrescar datos
+• Ctrl + R                → Actualizar datos
 
-🎯 EN TABLAS Y LISTAS:
+🎯 EN TABLAS:
 • Flechas ↑↓              → Navegar entre elementos
 • Enter                   → Seleccionar/Ver detalles
-• Letras A-Z              → Búsqueda rápida
-• Page Up/Down            → Páginas anterior/siguiente
+• Page Up/Down            → Cambiar páginas
 
 🎮 EN EL JUEGO:
-• Flechas                 → Mover cursor en tablero
-• Ctrl + Flechas          → Cambiar entre tableros
+• Flechas                 → Mover cursor
 • Enter / Espacio         → Hacer movimiento
-• Números 1-9             → Selección rápida de celda
 • Ctrl + R                → Reiniciar juego
 
-💡 CONSEJOS AVANZADOS:
+💡 CONSEJOS:
 • Los elementos enfocados se resaltan en azul
-• Use Tab dentro de pestañas para navegar contenido
-• Use Ctrl+Tab para cambiar entre pestañas rápidamente
-• Enter funciona en todos los botones y controles
-• Los atajos funcionan desde cualquier lugar
-
-🚀 FLUJO DE TRABAJO RECOMENDADO:
-1. Use Ctrl+1,2,3,4 para ir directamente a pestañas
-2. Use Tab para navegar dentro del contenido
-3. Use Enter para activar botones y controles
-4. Use Escape para cancelar o volver atrás
-5. Use F1 si necesita ayuda en cualquier momento
-
-⚡ SOLUCIÓN DE PROBLEMAS:
-• Si Enter no funciona, pruebe Espacio
-• Si no puede navegar, presione Tab varias veces
-• Si está perdido, presione Escape y comience de nuevo
-• Use F1 para esta ayuda desde cualquier lugar
+• Use Tab para navegar dentro de ventanas
+• Los atajos funcionan en cada ventana por separado
+• Presione F1 para ayuda en cualquier momento
         """
         
-        # Frame para el texto
         text_frame = tk.Frame(help_window)
         text_frame.pack(expand=True, fill="both", padx=15, pady=15)
         
-        # Widget de texto con scroll
         text_widget = tk.Text(
             text_frame,
             wrap=tk.WORD,
@@ -452,7 +436,6 @@ class AccessibilityManager:
         scrollbar = ttk.Scrollbar(text_frame, orient="vertical", command=text_widget.yview)
         text_widget.configure(yscrollcommand=scrollbar.set)
         
-        # Insertar texto
         text_widget.config(state="normal")
         text_widget.insert("1.0", help_text)
         text_widget.config(state="disabled")
@@ -460,7 +443,6 @@ class AccessibilityManager:
         scrollbar.pack(side="right", fill="y")
         text_widget.pack(side="left", expand=True, fill="both")
         
-        # Botón cerrar
         close_btn = tk.Button(
             help_window,
             text="Cerrar (Escape)",
@@ -474,7 +456,6 @@ class AccessibilityManager:
         close_btn.pack(pady=15)
         close_btn.focus_set()
         
-        # Atajos para cerrar
         help_window.bind("<Escape>", lambda e: help_window.destroy())
         help_window.bind("<Return>", lambda e: help_window.destroy())
         help_window.bind("<F1>", lambda e: help_window.destroy())
@@ -513,7 +494,7 @@ class AccessibilityManager:
             tk.Text, tk.Checkbutton, ttk.Checkbutton,
             tk.Radiobutton, ttk.Radiobutton,
             ttk.Combobox, tk.Scale, ttk.Scale,
-            ttk.Notebook  # Incluir notebooks
+            ttk.Notebook
         )
         
         if isinstance(widget, focusable_types):
@@ -560,60 +541,113 @@ class AccessibilityManager:
             pass
     
     def _on_focus_out(self, widget):
-        """Widget pierde foco"""
-        if widget in self.original_styles:
-            try:
-                original = self.original_styles[widget]
-                if 'bg' in original and 'bg' in widget.configure() and not isinstance(widget, ttk.Notebook):
-                    widget.configure(bg=original['bg'])
-                if 'highlightthickness' in original and 'highlightthickness' in widget.configure():
-                    widget.configure(highlightthickness=original['highlightthickness'])
-            except tk.TclError:
-                pass
-    
-    def _focus_next_widget(self):
-        """Enfocar siguiente widget"""
-        if not self.focus_ring_widgets:
-            self._auto_discover_widgets()
-            
-        if not self.focus_ring_widgets:
+        """Widget pierde foco - VERSIÓN MEJORADA QUE PRESERVA COLORES DE JUEGO"""
+        if widget not in self.original_styles:
             return
         
-        self.focus_index = (self.focus_index + 1) % len(self.focus_ring_widgets)
-        widget = self.focus_ring_widgets[self.focus_index]
-        
-        if self._is_widget_focusable(widget):
-            widget.focus_set()
-        else:
-            self._focus_next_widget()
-    
-    def _focus_previous_widget(self):
-        """Enfocar widget anterior"""
-        if not self.focus_ring_widgets:
-            self._auto_discover_widgets()
-            
-        if not self.focus_ring_widgets:
-            return
-        
-        self.focus_index = (self.focus_index - 1) % len(self.focus_ring_widgets)
-        widget = self.focus_ring_widgets[self.focus_index]
-        
-        if self._is_widget_focusable(widget):
-            widget.focus_set()
-        else:
-            self._focus_previous_widget()
-    
-    def _is_widget_focusable(self, widget):
-        """Verificar si un widget puede recibir foco"""
         try:
-            return (widget.winfo_exists() and 
-                   widget.winfo_viewable() and 
-                   str(widget['state']) != 'disabled')
-        except (tk.TclError, KeyError):
-            try:
-                return widget.winfo_exists() and widget.winfo_viewable()
-            except tk.TclError:
+            original = self.original_styles[widget]
+            
+            # IMPORTANTE: Verificar si el widget tiene un color de juego
+            current_bg = widget.cget('bg')
+            is_game_piece = (current_bg == "#3498db" or  # Azul (X)
+                           current_bg == "#e74c3c" or   # Rojo (O)
+                           current_bg == self.focus_color)  # Color de foco
+            
+            # Solo restaurar el color original si NO es una pieza del juego
+            if ('bg' in original and 
+                'bg' in widget.configure() and 
+                not isinstance(widget, ttk.Notebook) and
+                not is_game_piece):
+                widget.configure(bg=original['bg'])
+            elif (is_game_piece and 
+                  current_bg == self.focus_color and
+                  'bg' in original):
+                # Si está enfocado pero tiene color original, restaurar
+                widget.configure(bg=original['bg'])
+            
+            # Siempre restaurar el highlightthickness
+            if ('highlightthickness' in original and 
+                'highlightthickness' in widget.configure()):
+                widget.configure(highlightthickness=original['highlightthickness'])
+                
+        except tk.TclError:
+            pass
+    
+    def _focus_next_widget_safe(self):
+        """Enfocar siguiente widget de forma segura sin recursión"""
+        if not self.focus_ring_widgets:
+            self._auto_discover_widgets()
+
+        if not self.focus_ring_widgets:
+            return
+
+        attempts = 0
+        while attempts < self._max_navigation_attempts:
+            self.focus_index = (self.focus_index + 1) % len(self.focus_ring_widgets)
+            widget = self.focus_ring_widgets[self.focus_index]
+
+            if self._is_widget_focusable_safe(widget):
+                try:
+                    widget.focus_set()  # ← PROTEGER CON TRY-CATCH
+                    return
+                except tk.TclError:
+                    # Widget destruido, continuar buscando
+                    pass
+                
+            attempts += 1
+
+        # Si no encuentra ningún widget focusable, refrescar lista
+        self._auto_discover_widgets()
+        
+        # Si no encuentra ningún widget focusable, usar el primero disponible
+        if self.focus_ring_widgets:
+            self.focus_ring_widgets[0].focus_set()
+    
+    def _focus_previous_widget_safe(self):
+        """Enfocar widget anterior de forma segura sin recursión"""
+        if not self.focus_ring_widgets:
+            self._auto_discover_widgets()
+            
+        if not self.focus_ring_widgets:
+            return
+        
+        attempts = 0
+        while attempts < self._max_navigation_attempts:
+            self.focus_index = (self.focus_index - 1) % len(self.focus_ring_widgets)
+            widget = self.focus_ring_widgets[self.focus_index]
+            
+            if self._is_widget_focusable_safe(widget):
+                try:
+                    widget.focus_set()  # ← PROTEGER CON TRY-CATCH
+                    return
+                except tk.TclError:
+                    # Widget destruido, continuar buscando
+                    pass
+                
+            attempts += 1
+        
+        # Si no encuentra ningún widget focusable, refrescar lista
+        self._auto_discover_widgets()
+    
+    def _is_widget_focusable_safe(self, widget):
+        """Verificar si un widget puede recibir foco de forma segura"""
+        try:
+            if not widget.winfo_exists():
                 return False
+            if not widget.winfo_viewable():
+                return False
+            
+            # Verificar estado solo si el widget lo soporta
+            try:
+                state = str(widget['state'])
+                return state != 'disabled'
+            except (tk.TclError, KeyError):
+                # Si no tiene estado, asumir que es focusable
+                return True
+                
+        except tk.TclError:
+            return False
     
     def _clear_focus(self):
         """Limpiar foco actual"""
@@ -639,72 +673,379 @@ class AccessibilityManager:
         self._auto_discover_widgets()
 
 
+class GameAccessibilityManager(AccessibilityManager):
+    """
+    Gestor de accesibilidad específico para el juego Ultimate Tic Tac Toe
+    CON PRESERVACIÓN DE COLORES DE FIGURAS
+    """
+    
+    def __init__(self, root_window, game_instance=None):
+        super().__init__(root_window)
+        self.game = game_instance
+        
+        # Variables específicas del juego
+        self.board_focus_row = 1
+        self.board_focus_col = 1
+        self.cell_focus_row = 1
+        self.cell_focus_col = 1
+        
+        # Colores específicos del juego (para preservarlos)
+        self.game_colors = {
+            "#3498db": "X",  # Azul para X
+            "#e74c3c": "O",  # Rojo para O
+        }
+        
+        # Configurar navegación específica del juego
+        self.setup_game_navigation()
+    
+    def setup_game_navigation(self):
+        """Configurar navegación específica para el juego"""
+        
+        # Navegación con flechas en el tablero
+        self.root.bind("<Up>", self._handle_arrow_up)
+        self.root.bind("<Down>", self._handle_arrow_down)
+        self.root.bind("<Left>", self._handle_arrow_left)
+        self.root.bind("<Right>", self._handle_arrow_right)
+        
+        # Navegación entre tableros con Ctrl
+        self.root.bind("<Control-Up>", self._handle_board_up)
+        self.root.bind("<Control-Down>", self._handle_board_down)
+        self.root.bind("<Control-Left>", self._handle_board_left)
+        self.root.bind("<Control-Right>", self._handle_board_right)
+        
+        # Selección rápida con números
+        for i in range(1, 10):
+            self.root.bind(f"<Key-{i}>", lambda e, num=i: self._handle_number_key(num))
+        
+        # Crear indicador de posición si no existe
+        self._create_position_indicator()
+    
+    def _create_position_indicator(self):
+        """Crear indicador de posición del cursor"""
+        for widget in self._find_all_widgets(self.root):
+            if isinstance(widget, tk.Label) and "Cursor:" in str(widget.cget('text')):
+                self.cursor_label = widget
+                return
+        
+        self.cursor_label = None
+    
+    def _find_all_widgets(self, parent):
+        """Encontrar todos los widgets recursivamente"""
+        widgets = [parent]
+        try:
+            for child in parent.winfo_children():
+                widgets.extend(self._find_all_widgets(child))
+        except tk.TclError:
+            pass
+        return widgets
+    
+    def _handle_arrow_up(self, event):
+        """Manejar flecha arriba"""
+        self.cell_focus_row = max(0, self.cell_focus_row - 1)
+        self._update_game_focus()
+        return "break"
+    
+    def _handle_arrow_down(self, event):
+        """Manejar flecha abajo"""
+        self.cell_focus_row = min(2, self.cell_focus_row + 1)
+        self._update_game_focus()
+        return "break"
+    
+    def _handle_arrow_left(self, event):
+        """Manejar flecha izquierda"""
+        self.cell_focus_col = max(0, self.cell_focus_col - 1)
+        self._update_game_focus()
+        return "break"
+    
+    def _handle_arrow_right(self, event):
+        """Manejar flecha derecha"""
+        self.cell_focus_col = min(2, self.cell_focus_col + 1)
+        self._update_game_focus()
+        return "break"
+    
+    def _handle_board_up(self, event):
+        """Manejar Ctrl+Arriba (cambiar tablero)"""
+        self.board_focus_row = max(0, self.board_focus_row - 1)
+        self._update_game_focus()
+        return "break"
+    
+    def _handle_board_down(self, event):
+        """Manejar Ctrl+Abajo (cambiar tablero)"""
+        self.board_focus_row = min(2, self.board_focus_row + 1)
+        self._update_game_focus()
+        return "break"
+    
+    def _handle_board_left(self, event):
+        """Manejar Ctrl+Izquierda (cambiar tablero)"""
+        self.board_focus_col = max(0, self.board_focus_col - 1)
+        self._update_game_focus()
+        return "break"
+    
+    def _handle_board_right(self, event):
+        """Manejar Ctrl+Derecha (cambiar tablero)"""
+        self.board_focus_col = min(2, self.board_focus_col + 1)
+        self._update_game_focus()
+        return "break"
+    
+    def _handle_number_key(self, number):
+        """Manejar teclas numéricas 1-9"""
+        number -= 1  # 0-8
+        self.cell_focus_row = number // 3
+        self.cell_focus_col = number % 3
+        self._update_game_focus()
+        return "break"
+    
+    def _update_game_focus(self):
+        """Actualizar foco en el juego"""
+        # Actualizar indicador de posición si existe
+        if hasattr(self, 'cursor_label') and self.cursor_label:
+            try:
+                self.cursor_label.config(
+                    text=f"Cursor: Tablero ({self.board_focus_row + 1},{self.board_focus_col + 1}) - Celda ({self.cell_focus_row + 1},{self.cell_focus_col + 1})"
+                )
+            except tk.TclError:
+                pass
+        
+        # Intentar enfocar el botón correspondiente si el juego tiene la estructura esperada
+        if self.game and hasattr(self.game, 'buttons'):
+            try:
+                target_button = self.game.buttons[self.board_focus_row][self.board_focus_col][self.cell_focus_row][self.cell_focus_col]
+                if target_button and target_button.winfo_exists():
+                    target_button.focus_set()
+            except (IndexError, AttributeError, tk.TclError):
+                pass
+    
+    def _on_focus_out(self, widget):
+        """VERSIÓN ESPECIAL PARA JUEGO - Preservar colores de figuras X y O"""
+        if widget not in self.original_styles:
+            return
+        
+        try:
+            original = self.original_styles[widget]
+            current_bg = widget.cget('bg')
+            
+            # Verificar si es un botón con una figura del juego
+            is_game_piece = current_bg in self.game_colors
+            is_focus_color = current_bg == self.focus_color
+            
+            # Solo restaurar si:
+            # 1. NO es una pieza del juego (X o O)
+            # 2. O si está con color de foco pero originalmente era neutro
+            if ('bg' in original and 
+                'bg' in widget.configure() and 
+                not isinstance(widget, ttk.Notebook)):
+                
+                if not is_game_piece:
+                    # No es pieza del juego, restaurar color original
+                    widget.configure(bg=original['bg'])
+                elif is_focus_color and original['bg'] not in self.game_colors:
+                    # Está enfocado pero originalmente era neutro
+                    widget.configure(bg=original['bg'])
+                # Si es pieza del juego, NO cambiar el color
+            
+            # Siempre restaurar el highlightthickness
+            if ('highlightthickness' in original and 
+                'highlightthickness' in widget.configure()):
+                widget.configure(highlightthickness=original['highlightthickness'])
+                
+        except tk.TclError:
+            pass
+    
+    def _on_focus_in(self, widget):
+        """VERSIÓN ESPECIAL PARA JUEGO - No cambiar color si ya es pieza"""
+        self.current_focus_widget = widget
+        
+        try:
+            current_bg = widget.cget('bg')
+            is_game_piece = current_bg in self.game_colors
+            
+            # Solo aplicar color de foco si NO es una pieza del juego
+            if ('bg' in widget.configure() and 
+                not isinstance(widget, ttk.Notebook) and
+                not is_game_piece):
+                widget.configure(bg=self.focus_color)
+            
+            # Siempre aplicar el borde de foco
+            if 'highlightthickness' in widget.configure():
+                widget.configure(highlightthickness=2, highlightcolor=self.focus_border_color)
+                
+        except tk.TclError:
+            pass
+    
+    def _activate_widget_enhanced(self, widget):
+        """Activar widget en el contexto del juego"""
+        # Si es un botón del juego, intentar hacer el movimiento
+        if self.game and hasattr(self.game, 'make_move'):
+            try:
+                self.game.make_move(
+                    self.board_focus_row, 
+                    self.board_focus_col, 
+                    self.cell_focus_row, 
+                    self.cell_focus_col
+                )
+                return
+            except Exception:
+                pass
+        
+        # Si no es del juego, usar comportamiento por defecto
+        super()._activate_widget_enhanced(widget)
+
+
 # =============================================================================
-# FUNCIONES DE INTEGRACIÓN ACTUALIZADAS
+# FUNCIONES DE INTEGRACIÓN CORREGIDAS
 # =============================================================================
 
 def make_accessible(window, game_instance=None):
-    """Función simple para hacer accesible cualquier ventana Tkinter"""
-    return AccessibilityManager(window)
+    """
+    Función simple para hacer accesible cualquier ventana Tkinter
+    
+    Args:
+        window: La ventana principal (tk.Tk o tk.Toplevel)
+        game_instance: Instancia del juego (opcional, para funcionalidad específica)
+    
+    Returns:
+        AccessibilityManager instance
+    """
+    if game_instance:
+        return GameAccessibilityManager(window, game_instance)
+    else:
+        return AccessibilityManager(window)
+
 
 def add_accessibility_to_app(app_instance):
-    """Añadir accesibilidad a una aplicación existente"""
+    """
+    Añadir accesibilidad a una aplicación existente
+    
+    Args:
+        app_instance: Instancia de la aplicación que hereda de tk.Tk
+    
+    Returns:
+        AccessibilityManager instance
+    """
     accessibility_manager = AccessibilityManager(app_instance)
     app_instance.accessibility_manager = accessibility_manager
     return accessibility_manager
 
+
 def add_game_accessibility(game_window, game_instance):
-    """Añadir accesibilidad específica para el juego"""
-    # Para el juego, usar el AccessibilityManager base que ya incluye todo
-    game_accessibility = AccessibilityManager(game_window)
+    """
+    Añadir accesibilidad específica para el juego
+    
+    Args:
+        game_window: Ventana del juego (tk.Toplevel)
+        game_instance: Instancia del juego UltimateTicTacToe
+    
+    Returns:
+        GameAccessibilityManager instance
+    """
+    game_accessibility = GameAccessibilityManager(game_window, game_instance)
     game_instance.accessibility_manager = game_accessibility
+    
+    # Hacer que la ventana del juego tome el foco
+    game_window.focus_force()
+    game_window.lift()
+    
     return game_accessibility
 
 
 # =============================================================================
-# EJEMPLO DE USO Y TESTING
+# INSTRUCCIONES DE INTEGRACIÓN FINALES
+# =============================================================================
+
+"""
+🔧 CAMBIOS REALIZADOS PARA SOLUCIONAR LOS PROBLEMAS:
+
+1. **RECURSIÓN INFINITA SOLUCIONADA:**
+   ✅ Añadido control de navegación con _navigation_in_progress
+   ✅ Métodos _focus_next_widget_safe() y _focus_previous_widget_safe()
+   ✅ Límite máximo de intentos de navegación (_max_navigation_attempts)
+   ✅ Verificación segura de widgets focusables
+
+2. **PRESERVACIÓN DE COLORES DE FIGURAS:**
+   ✅ Detección de colores de juego (#3498db para X, #e74c3c para O)
+   ✅ _on_focus_out() mejorado que NO restaura colores de piezas
+   ✅ _on_focus_in() que NO aplica color de foco a piezas existentes
+   ✅ Lógica especial en GameAccessibilityManager
+
+3. **GESTIÓN MEJORADA DE ERRORES:**
+   ✅ Manejo seguro de widgets destruidos
+   ✅ Protección contra errores de Tkinter
+   ✅ Verificaciones de existencia de widgets
+
+INSTRUCCIONES DE INTEGRACIÓN:
+
+1. REEMPLAZA tu accessibility_manager.py con este código
+2. En tu APLICACION_COMPLETA.PY, asegúrate de tener:
+
+```python
+# Al principio del archivo
+from accessibility_manager import add_accessibility_to_app, add_game_accessibility
+
+# En App.__init__() - AL FINAL
+class App(tk.Tk):
+    def __init__(self, session=None):
+        # ... todo tu código original ...
+        self.show_login()
+        self.accessibility_manager = add_accessibility_to_app(self)
+
+# En UltimateTicTacToe.__init__() - AL FINAL  
+class UltimateTicTacToe:
+    def __init__(self, root, session=None, player1_id=None, player2_id=None):
+        # ... todo tu código original ...
+        self.create_boards()
+        self.accessibility_manager = add_game_accessibility(self.root, self)
+```
+
+3. ELIMINA cualquier línea que llame a _update_game_focus() en make_move
+
+RESULTADOS ESPERADOS:
+✅ No más errores de recursión en consola
+✅ Las figuras X y O mantienen sus colores (azul/rojo)
+✅ El foco se ve pero no interfiere con el juego
+✅ Navegación fluida sin loops infinitos
+✅ Ventanas independientes con navegación separada
+
+¡Esto debería solucionar completamente ambos problemas!
+"""
+
+# =============================================================================
+# DEMO PARA PROBAR LA PRESERVACIÓN DE COLORES
 # =============================================================================
 
 if __name__ == "__main__":
-    # Demo con pestañas para probar la funcionalidad
+    # Test de preservación de colores en botones
+    
     root = tk.Tk()
-    root.title("Demo Accesibilidad con Tabs")
-    root.geometry("600x400")
+    root.title("Test Preservación de Colores")
+    root.geometry("400x300")
     
-    # Crear notebook con pestañas
-    notebook = ttk.Notebook(root)
-    notebook.pack(expand=True, fill="both", padx=10, pady=10)
+    tk.Label(root, text="Test de Preservación de Colores", font=("Arial", 16)).pack(pady=20)
     
-    # Pestaña 1
-    tab1 = ttk.Frame(notebook)
-    notebook.add(tab1, text="Pestaña 1")
-    tk.Label(tab1, text="Contenido de Pestaña 1", font=("Arial", 14)).pack(pady=20)
-    tk.Button(tab1, text="Botón 1A").pack(pady=5)
-    tk.Button(tab1, text="Botón 1B").pack(pady=5)
+    # Crear botones con colores de juego
+    frame = tk.Frame(root)
+    frame.pack(pady=20)
     
-    # Pestaña 2
-    tab2 = ttk.Frame(notebook)
-    notebook.add(tab2, text="Pestaña 2")
-    tk.Label(tab2, text="Contenido de Pestaña 2", font=("Arial", 14)).pack(pady=20)
-    tk.Button(tab2, text="Botón 2A").pack(pady=5)
-    tk.Entry(tab2).pack(pady=5)
-    tk.Button(tab2, text="Botón 2B").pack(pady=5)
+    # Botón X (azul)
+    btn_x = tk.Button(frame, text="X", bg="#3498db", fg="white", width=5, height=2, font=("Arial", 14, "bold"))
+    btn_x.pack(side="left", padx=5)
     
-    # Pestaña 3
-    tab3 = ttk.Frame(notebook)
-    notebook.add(tab3, text="Pestaña 3")
-    tk.Label(tab3, text="Contenido de Pestaña 3", font=("Arial", 14)).pack(pady=20)
-    tk.Button(tab3, text="Botón 3A").pack(pady=5)
+    # Botón O (rojo)
+    btn_o = tk.Button(frame, text="O", bg="#e74c3c", fg="white", width=5, height=2, font=("Arial", 14, "bold"))
+    btn_o.pack(side="left", padx=5)
+    
+    # Botón normal
+    btn_normal = tk.Button(frame, text="Normal", width=8, height=2)
+    btn_normal.pack(side="left", padx=5)
     
     # Hacer accesible
     accessibility = make_accessible(root)
     
-    # Instrucciones
     instructions = tk.Label(
         root, 
-        text="Prueba: F1=Ayuda, Tab=Navegar, Ctrl+Tab=Cambiar pestañas, Enter=Activar",
-        fg="gray"
+        text="Use Tab para navegar. Los botones X y O deben mantener sus colores.",
+        fg="gray",
+        wraplength=350
     )
-    instructions.pack(side="bottom", pady=5)
+    instructions.pack(pady=20)
     
     root.mainloop()

@@ -1371,6 +1371,13 @@ class UltimateTicTacToe:
         
         # Actualizar la visualización de los tableros activos
         self.highlight_active_board()
+        
+        if hasattr(self, 'accessibility_manager'):
+            self.accessibility_manager.board_focus_row = board_i
+            self.accessibility_manager.board_focus_col = board_j
+            self.accessibility_manager.cell_focus_row = cell_i
+            self.accessibility_manager.cell_focus_col = cell_j
+        
     
     def check_win(self, board):
         # Verificar filas
