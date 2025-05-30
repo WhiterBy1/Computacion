@@ -17,6 +17,7 @@ from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker, Session
 from typing import List, Dict, Optional, Union, Tuple
 from accessibility_manager import make_accessible, add_accessibility_to_app, add_game_accessibility
+from analytics_module import add_analytics_to_app
 
 # Load environment variables
 load_dotenv()
@@ -1156,6 +1157,22 @@ class UltimateTicTacToe:
         self.restart_button = tk.Button(self.info_frame, text="Reiniciar Juego", command=self.restart_game)
         self.restart_button.grid(row=0, column=3, padx=10)
         
+        self.tutorial_button = tk.Button(
+                self.info_frame,
+                text="❓ Tutorial",
+                bg="#f39c12",
+                fg="white",
+                font=("Arial", 10, "bold"),
+                command=self.show_tutorial,
+                relief="flat",
+                padx=15,
+                pady=5,
+                cursor="hand2"
+            )
+        self.tutorial_button.grid(row=0, column=4, padx=10)
+
+        
+        
         # Actualizar el contador de tiempo
         self.update_time()
         
@@ -1171,6 +1188,177 @@ class UltimateTicTacToe:
             self.create_match_in_db()
     
     
+    def show_tutorial(self):
+        """Mostrar un tutorial mejorado del juego"""
+        tutorial_window = tk.Toplevel(self.root)
+        tutorial_window.title("🎮 Tutorial - Ultimate Tic Tac Toe")
+        tutorial_window.geometry("700x550")
+        tutorial_window.transient(self.root)
+        tutorial_window.grab_set()
+        tutorial_window.configure(bg="#f8f9fa")
+        tutorial_window.resizable(False, False)
+
+        # Header con estilo visual
+        header_frame = tk.Frame(tutorial_window, bg="#3498db", height=80)
+        header_frame.pack(fill="x")
+        header_frame.pack_propagate(False)
+
+        title = tk.Label(
+            header_frame, 
+            text="🎮 Ultimate Tic Tac Toe", 
+            font=("Helvetica", 20, "bold"),
+            bg="#3498db", 
+            fg="white"
+        )
+        title.pack(pady=15)
+
+        subtitle = tk.Label(
+            header_frame,
+            text="Guía Rápida de Juego",
+            font=("Helvetica", 12),
+            bg="#3498db",
+            fg="#ecf0f1"
+        )
+        subtitle.pack()
+
+        # Contenido principal
+        content_frame = tk.Frame(tutorial_window, bg="#f8f9fa")
+        content_frame.pack(fill="both", expand=True, padx=30, pady=20)
+
+        # Texto del tutorial con mejor formato
+        tutorial_sections = [
+            ("🎯 Objetivo Principal", 
+             "Gana 3 tableros pequeños en línea (horizontal, vertical o diagonal) para ganar la partida global. Cada tablero pequeño es un triqui tradicional de 3x3."),
+
+            ("🎮 Mecánicas de Juego", 
+             "• Haz clic en una celda del tablero resaltado (azul para X, rojo para O)\n• Tu jugada determina en qué tablero debe jugar tu oponente\n• El tablero destino corresponde a la posición de tu celda (1-9)"),
+
+            ("🏆 Ganar un Tablero", 
+             "Para conquistar un tablero pequeño, haz una línea de 3 símbolos iguales:\n• Horizontal: misma fila\n• Vertical: misma columna\n• Diagonal: esquina a esquina"),
+
+            ("🔄 Tableros Bloqueados", 
+             "Si envías al oponente a un tablero ya ganado o empatado:\n• Puede elegir jugar en cualquier tablero disponible\n• Aprovecha esta situación estratégicamente"),
+
+            ("💡 Estrategias Avanzadas", 
+             "• Controla el centro: da más opciones de movimiento\n• Piensa globalmente: cada jugada afecta dos niveles\n• Fuerza al oponente a tableros desfavorables\n• Bloquea sus líneas ganadoras tanto local como globalmente"),
+
+            ("⚡ Tips de Maestro", 
+             "• Observa el tiempo: decisiones rápidas pero inteligentes\n• Usa tableros bloqueados para recuperar control\n• Prioriza tableros centrales y esquinas\n• ¡Practica para desarrollar visión estratégica!")
+        ]
+
+        # Crear un frame con scrollbar para el contenido
+        canvas = tk.Canvas(content_frame, bg="#f8f9fa", highlightthickness=0)
+        scrollbar = ttk.Scrollbar(content_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg="#f8f9fa")
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Añadir secciones al frame scrollable
+        for i, (section_title, content) in enumerate(tutorial_sections):
+            # Frame para cada sección con sombra
+            section_frame = tk.Frame(scrollable_frame, bg="white", relief="solid", bd=1)
+            section_frame.pack(fill="x", pady=8, padx=5)
+
+            # Barra de color lateral
+            color_bar = tk.Frame(section_frame, bg="#3498db", width=4)
+            color_bar.pack(side="left", fill="y")
+
+            # Contenido de la sección
+            content_container = tk.Frame(section_frame, bg="white")
+            content_container.pack(side="left", fill="both", expand=True)
+
+            # Título de la sección
+            title_label = tk.Label(
+                content_container,
+                text=section_title,
+                font=("Helvetica", 14, "bold"),
+                bg="white",
+                fg="#2c3e50",
+                anchor="w"
+            )
+            title_label.pack(fill="x", padx=15, pady=(15, 8))
+
+            # Contenido de la sección
+            content_label = tk.Label(
+                content_container,
+                text=content,
+                font=("Helvetica", 11),
+                bg="white",
+                fg="#34495e",
+                anchor="w",
+                justify="left",
+                wraplength=580
+            )
+            content_label.pack(fill="x", padx=15, pady=(0, 15))
+
+        # Pack canvas y scrollbar
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # Footer con botones
+        footer_frame = tk.Frame(tutorial_window, bg="#ecf0f1", height=70)
+        footer_frame.pack(fill="x")
+        footer_frame.pack_propagate(False)
+
+        # Frame para centrar botones
+        buttons_frame = tk.Frame(footer_frame, bg="#ecf0f1")
+        buttons_frame.pack(expand=True)
+
+        # Botón de cerrar
+        close_button = tk.Button(
+            buttons_frame, 
+            text="✅ ¡Entendido, a Jugar!", 
+            command=tutorial_window.destroy, 
+            bg="#27ae60",
+            fg="white", 
+            font=("Helvetica", 12, "bold"),
+            relief="flat",
+            padx=25,
+            pady=12,
+            cursor="hand2"
+        )
+        close_button.pack(side="left", padx=10)
+
+        # Botón para jugar una partida de práctica
+        practice_button = tk.Button(
+            buttons_frame,
+            text="🎯 Reiniciar Partida",
+            command=lambda: [tutorial_window.destroy(), self.restart_game()],
+            bg="#3498db",
+            fg="white",
+            font=("Helvetica", 12, "bold"),
+            relief="flat",
+            padx=25,
+            pady=12,
+            cursor="hand2"
+        )
+        practice_button.pack(side="left", padx=10)
+
+        # Hacer la ventana modal y centrada
+        tutorial_window.transient(self.root)
+        tutorial_window.grab_set()
+
+        # Centrar la ventana
+        tutorial_window.update_idletasks()
+        x = (tutorial_window.winfo_screenwidth() // 2) - (700 // 2)
+        y = (tutorial_window.winfo_screenheight() // 2) - (550 // 2)
+        tutorial_window.geometry(f"700x550+{x}+{y}")
+
+        # Bind mouse wheel para scroll
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+
+        # Bind eventos de scroll
+        tutorial_window.bind("<MouseWheel>", _on_mousewheel)  # Windows
+        tutorial_window.bind("<Button-4>", lambda e: canvas.yview_scroll(-1, "units"))  # Linux
+        tutorial_window.bind("<Button-5>", lambda e: canvas.yview_scroll(1, "units"))   # Linux
+
     def create_position_indicator(self):
         """Crear indicador de posición del cursor (opcional)"""
         if not hasattr(self, 'cursor_label'):
@@ -1568,6 +1756,7 @@ class App(tk.Tk):
         self.match_repo = MatchRepository(self.session)
         self.ranking_service = RankingService(self.session)
         self.mmr_service = MMRService(self.session)
+        self.analytics_gui = add_analytics_to_app(self)
         
         # Initialize minimum data if database is empty
         self.initialize_base_data()
@@ -1807,11 +1996,13 @@ class App(tk.Tk):
         notebook = ttk.Notebook(main_frame)
 
         # Tabs
+        tab_analytics = ttk.Frame(notebook)
         tab_players = ttk.Frame(notebook)
         tab_matches = ttk.Frame(notebook)
         tab_ranking = ttk.Frame(notebook)
         tab_game = ttk.Frame(notebook)
 
+        notebook.add(tab_analytics, text="📊 Analytics")
         notebook.add(tab_players, text="👥 Players")
         notebook.add(tab_game, text="🎮 Play")
         notebook.add(tab_matches, text="⚔ Matches")
@@ -1854,6 +2045,7 @@ class App(tk.Tk):
         logout_btn.pack(side="left", padx=5)
 
         # Fill tabs
+        self.fill_analytics_tab(tab_analytics)
         self.fill_game_tab(tab_game)
         self.fill_players_tab(tab_players)
         self.fill_matches_tab(tab_matches)
@@ -3937,11 +4129,13 @@ class App(tk.Tk):
         # Tabs with icons
         tab_profile = ttk.Frame(notebook)
         tab_matches = ttk.Frame(notebook)
+        tab_tutorial = ttk.Frame(notebook) 
         tab_ranking = ttk.Frame(notebook)
         tab_game = ttk.Frame(notebook)
         
         notebook.add(tab_profile, text="👤 My Profile")
         notebook.add(tab_matches, text="⚔ My Matches")
+        notebook.add(tab_tutorial, text="🖥️ Tutorial") 
         notebook.add(tab_ranking, text="🏆 Ranking")
         notebook.add(tab_game, text="🎮 Play")
         
@@ -3984,8 +4178,352 @@ class App(tk.Tk):
         # Fill tabs
         self.fill_player_game_tab(tab_game)
         self.fill_player_profile_tab(tab_profile)
+        self.fill_tutorial_tab(tab_tutorial)
         self.fill_player_matches_tab(tab_matches)
         self.fill_player_ranking_tab(tab_ranking)
+    
+    def fill_tutorial_tab(self, tab_tutorial):
+        """Fill tutorial tab with interactive tutorial content"""
+        # Datos del tutorial con texto mejorado y más detalles
+        tutorial_data = [
+            (
+                "🎯 Paso 1: Objetivo del Juego", 
+                "Ultimate Tic Tac Toe es un juego estratégico donde debes ganar 3 tableros pequeños en línea (horizontal, vertical o diagonal) para ganar la partida global. Cada tablero pequeño es un triqui tradicional de 3x3.",
+                "sql/assets/tutorial1.png"
+            ),
+            (
+                "📍 Paso 2: Cómo Hacer una Jugada", 
+                "Haz clic en una celda vacía dentro del tablero resaltado. Tu jugada determina en qué tablero debe jugar tu oponente. Si haces clic en la celda superior-izquierda, envías al oponente al tablero superior-izquierdo.",
+                "sql/assets/tutorial2.png"
+            ),
+            (
+                "🏆 Paso 3: Ganar un Tablero", 
+                "Para ganar un tablero pequeño, debes hacer una línea de 3 símbolos iguales (horizontal, vertical o diagonal). Una vez ganado, ese tablero cuenta como tuyo en el juego global.",
+                "sql/assets/tutorial3.png"
+            ),
+            (
+                "🎮 Paso 4: Estrategia Global", 
+                "Piensa en dos niveles: local (ganar el tablero actual) y global (controlar la posición estratégica). Cada movimiento debe considerar ambos aspectos para maximizar tus oportunidades.",
+                "sql/assets/tutorial4.png"
+            ),
+            (
+                "🔄 Paso 5: Tableros Bloqueados", 
+                "Si te envían a un tablero ya ganado o empatado, puedes elegir jugar en cualquier tablero disponible. ¡Aprovecha esta oportunidad estratégica!",
+                "sql/assets/tutorial5.png"
+            )
+        ]
+        
+
+        # Inicializar listas para almacenar elementos del tutorial
+        self.tutorial_images = []
+        self.tutorial_titles = []
+        self.tutorial_texts = []
+
+        # Frame principal con estilo mejorado
+        main_frame = tk.Frame(tab_tutorial, bg="#f8f9fa", pady=20)
+        main_frame.pack(fill="both", expand=True)
+
+        # Título principal con estilo
+        title_frame = tk.Frame(main_frame, bg="#f8f9fa")
+        title_frame.pack(fill="x", padx=20, pady=(0, 20))
+
+        title_label = tk.Label(
+            title_frame, 
+            text="🎮 Tutorial Interactive: Ultimate Tic Tac Toe", 
+            font=("Helvetica", 18, "bold"),
+            bg="#f8f9fa", 
+            fg="#2c3e50"
+        )
+        title_label.pack()
+
+        subtitle_label = tk.Label(
+            title_frame,
+            text="Aprende las reglas y estrategias paso a paso",
+            font=("Helvetica", 12, "italic"),
+            bg="#f8f9fa",
+            fg="#7f8c8d"
+        )
+        subtitle_label.pack()
+
+        # Cargar y procesar imágenes del tutorial
+        for title, text, img_path in tutorial_data:
+            if os.path.exists(img_path):
+                try:
+                    img = tk.PhotoImage(file=img_path)
+                    # Redimensionar imagen si es necesario
+                    img = img.subsample(2, 2)
+                    self.tutorial_images.append(img)
+                    self.tutorial_titles.append(title)
+                    self.tutorial_texts.append(text)
+                except tk.TclError as e:
+                    print(f"ERROR: No se pudo cargar la imagen '{img_path}': {e}")
+                    # Agregar placeholder si la imagen falla
+                    self.tutorial_images.append(None)
+                    self.tutorial_titles.append(title)
+                    self.tutorial_texts.append(text)
+            else:
+                print(f"WARNING: La imagen '{img_path}' no se encontró. Se usará placeholder.")
+                # Agregar con placeholder
+                self.tutorial_images.append(None)
+                self.tutorial_titles.append(title)
+                self.tutorial_texts.append(text)
+
+        # Si no hay imágenes válidas, mostrar mensaje
+        if not any(self.tutorial_images):
+            error_label = tk.Label(
+                main_frame,
+                text="⚠️ Imágenes del tutorial no encontradas\nAsegúrate de que la carpeta 'assets' existe y contiene las imágenes tutorial1.png a tutorial6.png",
+                font=("Helvetica", 12),
+                bg="#f8f9fa",
+                fg="#e74c3c",
+                justify="center"
+            )
+            error_label.pack(expand=True)
+            return
+
+        # Índice actual del tutorial
+        self.current_tutorial_index = 0
+
+        # Frame para el contenido del tutorial
+        content_frame = tk.Frame(main_frame, bg="#ffffff", relief="ridge", bd=2)
+        content_frame.pack(fill="both", expand=True, padx=20, pady=10)
+
+        # Frame para la imagen
+        image_frame = tk.Frame(content_frame, bg="#ffffff", pady=20)
+        image_frame.pack(fill="x")
+
+        # Label para la imagen o placeholder
+        if self.tutorial_images[0]:
+            self.tutorial_image_label = tk.Label(image_frame, image=self.tutorial_images[0], bg="#ffffff")
+        else:
+            self.tutorial_image_label = tk.Label(
+                image_frame, 
+                text="🖼️ Imagen del Tutorial\n(No disponible)", 
+                font=("Helvetica", 14),
+                bg="#ecf0f1", 
+                fg="#7f8c8d",
+                width=30,
+                height=10,
+                relief="sunken",
+                bd=1
+            )
+        self.tutorial_image_label.pack()
+
+        # Frame para el texto
+        text_frame = tk.Frame(content_frame, bg="#ffffff", pady=20)
+        text_frame.pack(fill="both", expand=True, padx=20)
+
+        # Título del paso actual
+        self.tutorial_title_label = tk.Label(
+            text_frame, 
+            text=self.tutorial_titles[0], 
+            font=("Helvetica", 16, "bold"),
+            bg="#ffffff",
+            fg="#2c3e50",
+            wraplength=600
+        )
+        self.tutorial_title_label.pack(pady=(0, 15))
+
+        # Texto explicativo
+        self.tutorial_text_label = tk.Label(
+            text_frame, 
+            text=self.tutorial_texts[0], 
+            wraplength=600, 
+            justify="left",
+            font=("Helvetica", 11),
+            bg="#ffffff",
+            fg="#34495e",
+            anchor="w"
+        )
+        self.tutorial_text_label.pack(fill="x")
+
+        # Frame para navegación con estilo mejorado
+        nav_frame = tk.Frame(main_frame, bg="#f8f9fa", pady=15)
+        nav_frame.pack(fill="x", padx=20)
+
+        # Botón anterior
+        self.prev_tutorial_btn = tk.Button(
+            nav_frame, 
+            text="⟵ Anterior", 
+            command=self.show_previous_tutorial,
+            font=("Helvetica", 11, "bold"),
+            bg="#95a5a6",
+            fg="white",
+            relief="flat",
+            padx=20,
+            pady=8,
+            cursor="hand2"
+        )
+        self.prev_tutorial_btn.pack(side="left", padx=10)
+
+        # Indicador de progreso
+        self.progress_label = tk.Label(
+            nav_frame,
+            text=f"Paso 1 de {len(self.tutorial_titles)}",
+            font=("Helvetica", 11, "bold"),
+            bg="#f8f9fa",
+            fg="#2c3e50"
+        )
+        self.progress_label.pack(side="left", expand=True)
+
+        # Botón siguiente
+        self.next_tutorial_btn = tk.Button(
+            nav_frame, 
+            text="Siguiente ⟶", 
+            command=self.show_next_tutorial,
+            font=("Helvetica", 11, "bold"),
+            bg="#3498db",
+            fg="white",
+            relief="flat",
+            padx=20,
+            pady=8,
+            cursor="hand2"
+        )
+        self.next_tutorial_btn.pack(side="right", padx=10)
+
+        # Actualizar estado inicial de botones
+        self.update_tutorial_buttons()
+    
+    def show_next_tutorial(self):
+        """Show next tutorial step"""
+        if self.current_tutorial_index < len(self.tutorial_images) - 1:
+            self.current_tutorial_index += 1
+            self.update_tutorial_display()
+            self.update_tutorial_buttons()
+        else:
+            # Si ya estamos en el último paso y se hace clic, mostrar felicitaciones
+            self.show_tutorial_completion_message()
+    
+    def show_previous_tutorial(self):
+        """Show previous tutorial step"""
+        if self.current_tutorial_index > 0:
+            self.current_tutorial_index -= 1
+            self.update_tutorial_display()
+            self.update_tutorial_buttons()
+    
+    def show_tutorial_completion_message(self):
+        """Show completion message in a floating window when tutorial ends"""
+        # Crear ventana flotante de felicitaciones
+        completion_window = tk.Toplevel()
+        completion_window.title("🎉 Tutorial Completado")
+        completion_window.geometry("400x250")
+        completion_window.configure(bg="#f8f9fa")
+        completion_window.resizable(False, False)
+
+        # Hacer la ventana modal
+        completion_window.transient(self.winfo_toplevel())
+        completion_window.grab_set()
+
+        # Centrar la ventana
+        completion_window.update_idletasks()
+        parent = completion_window.master
+        x = parent.winfo_x() + (parent.winfo_width() // 2) - (400 // 2)
+        y = parent.winfo_y() + (parent.winfo_height() // 2) - (250 // 2)
+        completion_window.geometry(f"400x250+{x}+{y}")
+
+        # Header con icono de celebración
+        header_frame = tk.Frame(completion_window, bg="#27ae60", height=80)
+        header_frame.pack(fill="x")
+        header_frame.pack_propagate(False)
+
+        celebration_label = tk.Label(
+            header_frame,
+            text="🎉",
+            font=("Arial", 36),
+            bg="#27ae60",
+            fg="white"
+        )
+        celebration_label.pack(pady=10)
+
+        title_label = tk.Label(
+            header_frame,
+            text="¡Tutorial Completado!",
+            font=("Helvetica", 14, "bold"),
+            bg="#27ae60",
+            fg="white"
+        )
+        title_label.pack()
+
+        # Contenido del mensaje
+        content_frame = tk.Frame(completion_window, bg="#f8f9fa")
+        content_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        message_label = tk.Label(
+            content_frame,
+            text="¡Felicitaciones! Has completado el tutorial.\n\nAhora ya conoces todas las reglas y estrategias\nbásicas del Ultimate Tic Tac Toe.\n\n¡Ve a la pestaña 'Play' para poner en práctica\nlo aprendido!",
+            font=("Helvetica", 11),
+            bg="#f8f9fa",
+            fg="#2c3e50",
+            justify="center"
+        )
+        message_label.pack(expand=True)
+
+        # Botón para cerrar
+        button_frame = tk.Frame(completion_window, bg="#f8f9fa")
+        button_frame.pack(fill="x", pady=(0, 20))
+
+        close_button = tk.Button(
+            button_frame,
+            text="✅ ¡Entendido!",
+            command=completion_window.destroy,
+            bg="#3498db",
+            fg="white",
+            font=("Helvetica", 11, "bold"),
+            relief="flat",
+            padx=20,
+            pady=8,
+            cursor="hand2"
+        )
+        close_button.pack()
+
+        # Auto-cerrar después de 5 segundos (opcional)
+        completion_window.after(8000, completion_window.destroy)
+    
+    def update_tutorial_display(self):
+        """Update tutorial display with current step"""
+        index = self.current_tutorial_index
+        
+        # Actualizar imagen
+        if self.tutorial_images[index]:
+            self.tutorial_image_label.configure(image=self.tutorial_images[index])
+        else:
+            self.tutorial_image_label.configure(
+                image="",
+                text="🖼️ Imagen del Tutorial\n(No disponible)",
+                compound="none"
+            )
+        
+        # Actualizar título y texto
+        self.tutorial_title_label.configure(text=self.tutorial_titles[index])
+        self.tutorial_text_label.configure(text=self.tutorial_texts[index])
+        
+        # Actualizar indicador de progreso
+        self.progress_label.configure(
+            text=f"Paso {index + 1} de {len(self.tutorial_titles)}"
+        )
+    
+    def update_tutorial_buttons(self):
+        """Update tutorial navigation buttons state"""
+        # Botón anterior
+        if self.current_tutorial_index == 0:
+            self.prev_tutorial_btn.configure(state="disabled", bg="#bdc3c7")
+        else:
+            self.prev_tutorial_btn.configure(state="normal", bg="#95a5a6")
+
+        # Botón siguiente
+        if self.current_tutorial_index >= len(self.tutorial_images) - 1:
+            self.next_tutorial_btn.configure(
+                text="🎉 Finalizar Tutorial",  # CAMBIAR TEXTO
+                bg="#27ae60",
+                state="normal"  # MANTENER HABILITADO para mostrar ventana flotante
+            )
+        else:
+            self.next_tutorial_btn.configure(
+                text="Siguiente ⟶",
+                bg="#3498db",
+                state="normal"
+            )
+
     
     def fill_player_game_tab(self, tab):
         """Llenar la pestaña de juego para jugadores normales"""
