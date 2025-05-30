@@ -608,15 +608,15 @@ class AccessibilityManager:
         """Enfocar widget anterior de forma segura sin recursión"""
         if not self.focus_ring_widgets:
             self._auto_discover_widgets()
-            
+
         if not self.focus_ring_widgets:
             return
-        
+
         attempts = 0
         while attempts < self._max_navigation_attempts:
             self.focus_index = (self.focus_index - 1) % len(self.focus_ring_widgets)
             widget = self.focus_ring_widgets[self.focus_index]
-            
+
             if self._is_widget_focusable_safe(widget):
                 try:
                     widget.focus_set()  # ← PROTEGER CON TRY-CATCH
@@ -626,7 +626,7 @@ class AccessibilityManager:
                     pass
                 
             attempts += 1
-        
+
         # Si no encuentra ningún widget focusable, refrescar lista
         self._auto_discover_widgets()
     
@@ -947,66 +947,6 @@ def add_game_accessibility(game_window, game_instance):
     
     return game_accessibility
 
-
-# =============================================================================
-# INSTRUCCIONES DE INTEGRACIÓN FINALES
-# =============================================================================
-
-"""
-🔧 CAMBIOS REALIZADOS PARA SOLUCIONAR LOS PROBLEMAS:
-
-1. **RECURSIÓN INFINITA SOLUCIONADA:**
-   ✅ Añadido control de navegación con _navigation_in_progress
-   ✅ Métodos _focus_next_widget_safe() y _focus_previous_widget_safe()
-   ✅ Límite máximo de intentos de navegación (_max_navigation_attempts)
-   ✅ Verificación segura de widgets focusables
-
-2. **PRESERVACIÓN DE COLORES DE FIGURAS:**
-   ✅ Detección de colores de juego (#3498db para X, #e74c3c para O)
-   ✅ _on_focus_out() mejorado que NO restaura colores de piezas
-   ✅ _on_focus_in() que NO aplica color de foco a piezas existentes
-   ✅ Lógica especial en GameAccessibilityManager
-
-3. **GESTIÓN MEJORADA DE ERRORES:**
-   ✅ Manejo seguro de widgets destruidos
-   ✅ Protección contra errores de Tkinter
-   ✅ Verificaciones de existencia de widgets
-
-INSTRUCCIONES DE INTEGRACIÓN:
-
-1. REEMPLAZA tu accessibility_manager.py con este código
-2. En tu APLICACION_COMPLETA.PY, asegúrate de tener:
-
-```python
-# Al principio del archivo
-from accessibility_manager import add_accessibility_to_app, add_game_accessibility
-
-# En App.__init__() - AL FINAL
-class App(tk.Tk):
-    def __init__(self, session=None):
-        # ... todo tu código original ...
-        self.show_login()
-        self.accessibility_manager = add_accessibility_to_app(self)
-
-# En UltimateTicTacToe.__init__() - AL FINAL  
-class UltimateTicTacToe:
-    def __init__(self, root, session=None, player1_id=None, player2_id=None):
-        # ... todo tu código original ...
-        self.create_boards()
-        self.accessibility_manager = add_game_accessibility(self.root, self)
-```
-
-3. ELIMINA cualquier línea que llame a _update_game_focus() en make_move
-
-RESULTADOS ESPERADOS:
-✅ No más errores de recursión en consola
-✅ Las figuras X y O mantienen sus colores (azul/rojo)
-✅ El foco se ve pero no interfiere con el juego
-✅ Navegación fluida sin loops infinitos
-✅ Ventanas independientes con navegación separada
-
-¡Esto debería solucionar completamente ambos problemas!
-"""
 
 # =============================================================================
 # DEMO PARA PROBAR LA PRESERVACIÓN DE COLORES

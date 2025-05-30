@@ -18,6 +18,8 @@ from sqlalchemy.orm import relationship, sessionmaker, Session
 from typing import List, Dict, Optional, Union, Tuple
 from accessibility_manager import make_accessible, add_accessibility_to_app, add_game_accessibility
 from analytics_module import add_analytics_to_app
+from audio_manager import AudioManager, AudioControlWidget, AudioState, add_audio_to_app, add_audio_to_game
+
 
 # Load environment variables
 load_dotenv()
@@ -1182,11 +1184,32 @@ class UltimateTicTacToe:
         self.accessibility_manager = add_game_accessibility(self.root, self)
         
         self.create_position_indicator()
+        # Obtener audio manager de la aplicación principal
+        main_app = root.master if hasattr(root, 'master') else None
+        if main_app and hasattr(main_app, 'audio_manager'):
+            self.audio_manager = main_app.audio_manager
+            # Notificar inicio de partida
+            add_audio_to_game(self, self.audio_manager)
+        else:
+            self.audio_manager = None
+        
+        # Agregar controles de audio al juego
+        self.setup_game_audio_controls()
         
         # Crear partida en la base de datos si hay jugadores
         if self.session and self.player1_id and self.player2_id:
             self.create_match_in_db()
     
+    def setup_game_audio_controls(self):
+        """Configurar controles de audio específicos del juego"""
+        if self.audio_manager:
+            # Frame para controles de audio del juego
+            game_audio_frame = tk.Frame(self.info_frame)
+            game_audio_frame.grid(row=1, column=0, columnspan=5, pady=5)
+            
+            # Widget de control
+            self.game_audio_widget = AudioControlWidget(game_audio_frame, self.audio_manager)
+            self.game_audio_widget.pack()
     
     def show_tutorial(self):
         """Mostrar un tutorial mejorado del juego"""
@@ -1521,17 +1544,36 @@ class UltimateTicTacToe:
             bg=self.player_X_color if self.current_player == "X" else self.player_O_color
         )
         
+        # AUDIO: Reproducir sonido de punto/movimiento (opcional)
+        if hasattr(self, 'audio_manager') and self.audio_manager:
+            self.audio_manager.on_point_scored()
+        
         # Verificar si hay un ganador en este tablero
         if self.check_win(self.game_boards[board_i][board_j]):
             self.board_winners[board_i][board_j] = self.current_player
             self.mark_board_as_won(board_i, board_j)
             
+            # AUDIO: Reproducir sonido de subtablero ganado
+            if hasattr(self, 'audio_manager') and self.audio_manager:
+                self.audio_manager.on_subboard_won()
+                
+                # Contar subtableros completados para música late game
+                completed_count = sum(1 for row in self.board_winners 
+                                    for cell in row if cell is not None and cell != "Empate")
+                self.audio_manager.update_subboards_completed(completed_count)
+            
             # Verificar si hay un ganador del juego completo
             if self.check_win(self.board_winners):
                 self.game_winner = self.current_player
+                
+                # AUDIO: Reproducir sonido de victoria
+                if hasattr(self, 'audio_manager') and self.audio_manager:
+                    self.audio_manager.on_match_won()
+                
                 self.finish_match_in_db()  # Registrar fin de partida
                 self.show_game_stats()
                 return
+        
         # Verificar si hay empate en este tablero
         elif self.check_draw(self.game_boards[board_i][board_j]):
             self.board_winners[board_i][board_j] = "Empate"
@@ -1548,24 +1590,29 @@ class UltimateTicTacToe:
         self.current_player = "O" if self.current_player == "X" else "X"
         self.player_label.config(text=f"Turno del Jugador: {self.current_player}")
         
-        # Determinar el siguiente tablero
-        if self.board_winners[cell_i][cell_j] is None:
-            self.next_board = (cell_i, cell_j)
-            self.next_board_label.config(text=f"Tablero activo: ({cell_i+1}, {cell_j+1})")
+        # CRÍTICO: Determinar el siguiente tablero CORRECTAMENTE
+        # El siguiente tablero se determina por la posición de la celda que acabamos de jugar
+        target_board_i, target_board_j = cell_i, cell_j
+        
+        # Verificar si el tablero objetivo está disponible (no ganado ni empatado)
+        if self.board_winners[target_board_i][target_board_j] is None:
+            # El tablero objetivo está disponible
+            self.next_board = (target_board_i, target_board_j)
+            self.next_board_label.config(text=f"Tablero activo: ({target_board_i+1}, {target_board_j+1})")
         else:
-            # Si el tablero ya está ganado o empatado, el jugador puede elegir cualquier tablero
+            # El tablero objetivo ya está completo, el jugador puede elegir cualquier tablero disponible
             self.next_board = None
             self.next_board_label.config(text="Tablero activo: Cualquiera")
         
         # Actualizar la visualización de los tableros activos
         self.highlight_active_board()
         
+        # Actualizar foco de accesibilidad si existe
         if hasattr(self, 'accessibility_manager'):
             self.accessibility_manager.board_focus_row = board_i
             self.accessibility_manager.board_focus_col = board_j
             self.accessibility_manager.cell_focus_row = cell_i
             self.accessibility_manager.cell_focus_col = cell_j
-        
     
     def check_win(self, board):
         # Verificar filas
@@ -1677,6 +1724,9 @@ class UltimateTicTacToe:
         stats_message += f"Jugador O - Tiempo promedio: {o_avg_time:.2f}s\n"
         stats_message += f"Tiempo promedio total: {total_avg_time:.2f}s"
         
+        if self.audio_manager:
+            self.audio_manager.on_game_end()
+        
         messagebox.showinfo("¡Fin del juego!", stats_message)
     
     def update_time(self):
@@ -1705,6 +1755,7 @@ class UltimateTicTacToe:
         self.player_label.config(text=f"Turno del Jugador: {self.current_player}")
         self.next_board_label.config(text="Tablero activo: Cualquiera")
         
+        
         # Destruir todos los widgets y recrear el tablero
         for i in range(3):
             for j in range(3):
@@ -1714,6 +1765,9 @@ class UltimateTicTacToe:
         
         # Reiniciar el temporizador
         self.update_time()
+        
+        if self.audio_manager:
+            self.audio_manager.on_game_start()
         
         # Crear nueva partida en la base de datos si hay jugadores
         if self.session and self.player1_id and self.player2_id:
@@ -1758,11 +1812,42 @@ class App(tk.Tk):
         self.mmr_service = MMRService(self.session)
         self.analytics_gui = add_analytics_to_app(self)
         
+        # Inicializar sistema de audio
+        self.audio_manager = add_audio_to_app(self)
+        
+        # Crear widget de control de audio
+        self.setup_audio_controls()
         # Initialize minimum data if database is empty
         self.initialize_base_data()
         
         # Show login screen
         self.show_login()
+    
+    def setup_audio_controls(self):
+        """Configurar controles de audio en la interfaz principal"""
+        # Frame para controles de audio en la parte superior
+        self.audio_frame = tk.Frame(self, bg=COLORS["bg_light"])
+        self.audio_frame.pack(side="top", fill="x", padx=10, pady=5)
+        
+        # Widget de control de audio
+        self.audio_widget = AudioControlWidget(self.audio_frame, self.audio_manager)
+        self.audio_widget.pack(side="right")
+        
+        # Etiqueta informativa
+        audio_label = tk.Label(
+            self.audio_frame,
+            text="🎵 Audio Controls",
+            bg=COLORS["bg_light"],
+            fg=COLORS["text_dark"],
+            font=("Helvetica", 10)
+        )
+        audio_label.pack(side="right", padx=10)
+
+    def on_closing(self):
+        """Método llamado al cerrar la aplicación"""
+        if hasattr(self, 'audio_manager'):
+            self.audio_manager.cleanup()
+        self.destroy()
     
     def initialize_base_data(self):
         """Initialize base data if it doesn't exist in the database"""
@@ -1846,6 +1931,9 @@ class App(tk.Tk):
             text="Create User",
             command=self.create_user_dialog
         ).pack(pady=10)
+        
+        if hasattr(self, 'audio_manager'):
+            self.audio_manager.set_context(AudioState.LOBBY)
     
     def login(self, username: str, password: str):
         """Process login"""
@@ -2050,6 +2138,9 @@ class App(tk.Tk):
         self.fill_players_tab(tab_players)
         self.fill_matches_tab(tab_matches)
         self.fill_ranking_tab(tab_ranking)
+        
+        if hasattr(self, 'audio_manager'):
+            self.audio_manager.set_context(AudioState.LOBBY)
     
     def sync_data(self):
         """Synchronize all data with the database"""
@@ -4181,6 +4272,9 @@ class App(tk.Tk):
         self.fill_tutorial_tab(tab_tutorial)
         self.fill_player_matches_tab(tab_matches)
         self.fill_player_ranking_tab(tab_ranking)
+        
+        if hasattr(self, 'audio_manager'):
+            self.audio_manager.set_context(AudioState.LOBBY)
     
     def fill_tutorial_tab(self, tab_tutorial):
         """Fill tutorial tab with interactive tutorial content"""
@@ -5232,6 +5326,10 @@ if __name__ == "__main__":
         
         # Iniciar la aplicación con la sesión
         app = App(session)
+        
+        # AGREGAR: Configurar protocolo de cierre
+        app.protocol("WM_DELETE_WINDOW", app.on_closing)
+        
         app.mainloop()
         
     finally:
